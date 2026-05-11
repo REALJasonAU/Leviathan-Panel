@@ -11,6 +11,8 @@ Phase 6 focused on release-candidate readiness rather than new runtime surface a
 - Added GitHub Actions CI for format, lint, typecheck, tests, build, and Playwright E2E runs.
 - Expanded Playwright coverage for mock-admin navigation, node creation, `.env.example` import, server provisioning, console view, API key creation, SFTP rotation, and Cloudflare dry-run.
 - Improved panel resilience so partial server-detail failures no longer blank the whole view when a daemon-dependent endpoint is unavailable.
+- Landed the Leviathan Command Deck redesign across admin and user flows with a unified shell, grouped sidebar navigation, upgraded server detail surfaces, one-time secret reveal modals, and safer confirmation-driven destructive actions.
+- Fixed local panel/API interoperability so both `localhost` and `127.0.0.1` dev origins work cleanly during browser verification.
 
 ## Still Partial
 

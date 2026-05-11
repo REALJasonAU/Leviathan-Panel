@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount } from "svelte";
+  import { onDestroy, onMount, tick } from "svelte";
   import type {
     ApiKeyRecord,
     AlertEventRecord,
@@ -29,7 +29,18 @@
 
   import Card from "./lib/components/Card.svelte";
   import EmptyState from "./lib/components/EmptyState.svelte";
+  import ActionButton from "./lib/components/ActionButton.svelte";
+  import AppShell from "./lib/components/AppShell.svelte";
+  import PageHeader from "./lib/components/PageHeader.svelte";
+  import ConfirmDialog from "./lib/components/ConfirmDialog.svelte";
+  import LoadingState from "./lib/components/LoadingState.svelte";
+  import ProgressBar from "./lib/components/ProgressBar.svelte";
+  import SecretRevealModal from "./lib/components/SecretRevealModal.svelte";
+  import SidebarNav from "./lib/components/SidebarNav.svelte";
   import StatCard from "./lib/components/StatCard.svelte";
+  import StatusBadge from "./lib/components/StatusBadge.svelte";
+  import TabNav from "./lib/components/TabNav.svelte";
+  import TopHeader from "./lib/components/TopHeader.svelte";
   import { api, consoleSocketUrl, type SessionResponse } from "./lib/api";
   import { session } from "./lib/stores/auth";
 
@@ -37,6 +48,7 @@
     | "overview"
     | "servers"
     | "nodes"
+    | "daemon-updates"
     | "templates"
     | "users"
     | "roles"
@@ -67,6 +79,7 @@
     { id: "overview", label: "Overview" },
     { id: "servers", label: "Servers" },
     { id: "nodes", label: "Nodes" },
+    { id: "daemon-updates", label: "Daemon Updates" },
     { id: "templates", label: "Templates" },
     { id: "users", label: "Users" },
     { id: "roles", label: "Roles" },
@@ -217,9 +230,157 @@
     tunnelId: "",
     zoneId: "",
   };
+  let topSearchValue = "";
+  let serverListMode: "cards" | "table" = "cards";
+  let selectedServerRecord: ServerRecord | null = null;
+  let currentViewTitle = "Overview";
+  let currentViewSubtitle = "";
+  let activeTopBreadcrumbs: Array<{ label: string; key?: string }> = [];
+  let activePageBreadcrumbs: Array<{ label: string; href?: string; key?: string }> = [];
+  let sidebarStatusLabel = "Awaiting node enrollment";
+  let sidebarStatusVariant: "online" | "warning" | "offline" = "warning";
+  let busyAction = "";
+  let confirmState: {
+    open: boolean;
+    title: string;
+    description: string;
+    confirmLabel: string;
+    danger: boolean;
+    onConfirm: null | (() => Promise<void> | void);
+  } = {
+    open: false,
+    title: "",
+    description: "",
+    confirmLabel: "Confirm",
+    danger: false,
+    onConfirm: null,
+  };
+  let secretReveal = {
+    open: false,
+    title: "",
+    subtitle: "",
+    secret: "",
+    warning: "",
+    hint: "",
+  };
 
-  const selectedServer = () =>
-    servers.find((server) => server.id === selectedServerId) ?? null;
+  const pageDescriptions: Record<View, string> = {
+    overview: "Fleet posture, activity, and operational quick actions.",
+    servers:
+      "Manage game servers and Docker workloads with live runtime controls.",
+    nodes: "Node fleet health, registration, metrics, and maintenance controls.",
+    "daemon-updates":
+      "Daemon version posture, update readiness, and fleet rollout visibility.",
+    templates:
+      "Template catalog with startup defaults and environment metadata.",
+    users: "Identity access control, role assignment, and account posture.",
+    roles: "Permission bundles for operators, staff, and automation clients.",
+    backups:
+      "Backup lifecycle controls for create, restore, download, and retention.",
+    "scheduled-tasks": "Recurring automation for power actions, commands, and jobs.",
+    "audit-logs": "Trace every sensitive control-plane action with redacted metadata.",
+    alerts: "Operational alerts for crashes, failures, thresholds, and node events.",
+    "api-keys":
+      "Scoped API credentials with one-time key reveal and usage visibility.",
+    webhooks: "Outbound webhook endpoints, event filters, and delivery history.",
+    "backup-targets":
+      "Provider configuration for local and S3-compatible backup destinations.",
+    cloudflare:
+      "Route lifecycle controls for DNS, tunnel sync, dry-run, and apply.",
+    firewall: "Firewall policy overview and server-level enforcement guidance.",
+    jobs: "Background queue state across pending, running, success, and failures.",
+    plugins: "Trusted plugin manifests and extension lifecycle visibility.",
+    billing: "Stripe and WHMCS provisioning integration configuration guidance.",
+    settings:
+      "Global platform controls for retention, auth, alerts, and integrations.",
+  };
+
+  const sidebarGroups = [
+    {
+      id: "main",
+      label: "Main",
+      items: [
+        { id: "overview", label: "Overview", icon: "OV", href: "#overview" },
+        { id: "servers", label: "Servers", icon: "SV", href: "#servers" },
+        { id: "nodes", label: "Nodes", icon: "ND", href: "#nodes" },
+        { id: "templates", label: "Templates", icon: "TP", href: "#templates" },
+        { id: "backups", label: "Backups", icon: "BK", href: "#backups" },
+        {
+          id: "scheduled-tasks",
+          label: "Schedules",
+          icon: "SC",
+          href: "#scheduled-tasks",
+        },
+      ],
+    },
+    {
+      id: "access",
+      label: "Access",
+      items: [
+        { id: "users", label: "Users", icon: "US", href: "#users" },
+        { id: "roles", label: "Roles", icon: "RL", href: "#roles" },
+        { id: "api-keys", label: "API Keys", icon: "AK", href: "#api-keys" },
+        {
+          id: "audit-logs",
+          label: "Audit Logs",
+          icon: "AL",
+          href: "#audit-logs",
+        },
+      ],
+    },
+    {
+      id: "infrastructure",
+      label: "Infrastructure",
+      items: [
+        {
+          id: "allocations",
+          label: "Allocations",
+          icon: "AP",
+          href: "#nodes",
+        },
+        {
+          id: "network",
+          label: "Network",
+          icon: "NW",
+          href: "#servers",
+        },
+        {
+          id: "cloudflare",
+          label: "Cloudflare",
+          icon: "CF",
+          href: "#cloudflare",
+        },
+        { id: "firewall", label: "Firewall", icon: "FW", href: "#firewall" },
+        { id: "sftp", label: "SFTP", icon: "SF", href: "#servers" },
+        {
+          id: "daemon-updates",
+          label: "Daemon Updates",
+          icon: "DU",
+          href: "#daemon-updates",
+        },
+        {
+          id: "backup-targets",
+          label: "Backup Targets",
+          icon: "BT",
+          href: "#backup-targets",
+        },
+      ],
+    },
+    {
+      id: "system",
+      label: "System",
+      items: [
+        { id: "alerts", label: "Alerts", icon: "AR", href: "#alerts" },
+        { id: "jobs", label: "Jobs", icon: "JB", href: "#jobs" },
+        { id: "webhooks", label: "Webhooks", icon: "WH", href: "#webhooks" },
+        { id: "plugins", label: "Plugins", icon: "PL", href: "#plugins" },
+        { id: "billing", label: "Billing", icon: "BL", href: "#billing" },
+        { id: "settings", label: "Settings", icon: "ST", href: "#settings" },
+      ],
+    },
+  ];
+
+  const selectedServer = () => selectedServerRecord;
 
   const can = (permission: string) =>
     Boolean(
@@ -237,6 +398,80 @@
     } catch {
       return raw;
     }
+  };
+
+  const openConfirm = (options: {
+    title: string;
+    description: string;
+    confirmLabel: string;
+    danger?: boolean;
+    onConfirm: () => Promise<void> | void;
+  }) => {
+    confirmState = {
+      open: true,
+      title: options.title,
+      description: options.description,
+      confirmLabel: options.confirmLabel,
+      danger: options.danger ?? false,
+      onConfirm: options.onConfirm,
+    };
+  };
+
+  const closeConfirm = () => {
+    confirmState = {
+      open: false,
+      title: "",
+      description: "",
+      confirmLabel: "Confirm",
+      danger: false,
+      onConfirm: null,
+    };
+    busyAction = "";
+  };
+
+  const executeConfirm = async () => {
+    if (!confirmState.onConfirm) {
+      return;
+    }
+    busyAction = confirmState.confirmLabel;
+    try {
+      await confirmState.onConfirm();
+      closeConfirm();
+    } catch (actionError) {
+      error =
+        actionError instanceof Error
+          ? parseApiError(actionError.message)
+          : "Requested action failed";
+      busyAction = "";
+    }
+  };
+
+  const revealSecret = (options: {
+    title: string;
+    subtitle: string;
+    secret: string;
+    warning: string;
+    hint?: string;
+  }) => {
+    secretReveal = {
+      open: true,
+      title: options.title,
+      subtitle: options.subtitle,
+      secret: options.secret,
+      warning: options.warning,
+      hint: options.hint ?? "",
+    };
+  };
+
+  const closeSecretReveal = () => {
+    secretReveal = {
+      open: false,
+      title: "",
+      subtitle: "",
+      secret: "",
+      warning: "",
+      hint: "",
+    };
   };
 
   const setViewFromHash = () => {
@@ -407,6 +642,14 @@
       capabilities: createNodeForm.capabilities.split(",").map((item) => item.trim()),
     });
     nodeBootstrapToken = result.bootstrapToken;
+    revealSecret({
+      title: `Bootstrap token for ${result.node.name}`,
+      subtitle: "Use this token once when pairing a daemon node.",
+      secret: result.bootstrapToken,
+      warning:
+        "Store this bootstrap token securely. It grants one-time node registration capability.",
+      hint: `${result.node.publicAddress} · ${result.node.region}`,
+    });
     await loadAll(currentToken);
   };
 
@@ -507,6 +750,13 @@
     await loadAll(currentToken);
   };
 
+  const powerServerById = async (serverId: string, action: string) => {
+    if (selectedServerId !== serverId) {
+      await selectServer(serverId);
+    }
+    await powerServer(action);
+  };
+
   const connectConsole = () => {
     if (!currentToken || !selectedServer() || serverSection !== "console") {
       return;
@@ -562,6 +812,27 @@
     await browseFiles(currentPath);
   };
 
+  const confirmDeleteFile = (path: string) => {
+    if (!currentToken || !selectedServer()) {
+      return;
+    }
+    const fileName = path.split("/").pop() || path;
+    openConfirm({
+      title: "Delete file",
+      description: `Permanently remove ${fileName} from ${selectedServer()!.name}?`,
+      confirmLabel: "Delete file",
+      danger: true,
+      onConfirm: async () => {
+        await api.servers.files.remove(currentToken!, selectedServer()!.id, path);
+        if (currentFilePath === path) {
+          currentFilePath = "";
+          fileEditorContent = "";
+        }
+        await browseFiles(currentPath);
+      },
+    });
+  };
+
   const uploadFile = async (event: Event) => {
     if (!currentToken || !selectedServer()) {
       return;
@@ -580,6 +851,22 @@
     await browseFiles(currentPath);
   };
 
+  const downloadFile = async (path: string) => {
+    if (!currentToken || !selectedServer()) {
+      return;
+    }
+    const blob = await api.servers.files.downloadStream(
+      currentToken,
+      selectedServer()!.id,
+      path,
+    );
+    const anchor = document.createElement("a");
+    anchor.href = URL.createObjectURL(blob);
+    anchor.download = path.split("/").pop() || "download";
+    anchor.click();
+    URL.revokeObjectURL(anchor.href);
+  };
+
   const createBackup = async () => {
     if (!currentToken || !selectedServer()) {
       return;
@@ -592,15 +879,32 @@
     if (!currentToken) {
       return;
     }
-    await api.servers.backups.restore(currentToken, backupId);
+    openConfirm({
+      title: "Restore backup",
+      description:
+        "Restore this backup over the current server data? Existing files may be overwritten.",
+      confirmLabel: "Restore backup",
+      danger: true,
+      onConfirm: async () => {
+        await api.servers.backups.restore(currentToken, backupId);
+      },
+    });
   };
 
   const deleteBackup = async (backupId: string) => {
     if (!currentToken || !selectedServer()) {
       return;
     }
-    await api.servers.backups.remove(currentToken, backupId);
-    await loadServerDetailData(selectedServer()!.id);
+    openConfirm({
+      title: "Delete backup",
+      description: `Delete backup ${backupId} from ${selectedServer()!.name}? This cannot be undone.`,
+      confirmLabel: "Delete backup",
+      danger: true,
+      onConfirm: async () => {
+        await api.servers.backups.remove(currentToken, backupId);
+        await loadServerDetailData(selectedServer()!.id);
+      },
+    });
   };
 
   const downloadBackup = async (backupId: string) => {
@@ -684,7 +988,31 @@
       "servers.power",
     ]);
     generatedApiKey = result.plainTextKey;
+    revealSecret({
+      title: "Leviathan API key created",
+      subtitle: "The raw automation credential is shown once.",
+      secret: result.plainTextKey,
+      warning:
+        "Copy this API key now. Leviathan stores only the hashed version after this dialog closes.",
+      hint: `Prefix: ${result.record.prefix ?? result.record.id}`,
+    });
     apiKeys = await api.admin.apiKeys.list(currentToken);
+  };
+
+  const revokeApiKey = async (keyId: string, keyName: string) => {
+    if (!currentToken) {
+      return;
+    }
+    openConfirm({
+      title: "Revoke API key",
+      description: `Revoke ${keyName}? Automation using this key will lose access immediately.`,
+      confirmLabel: "Revoke key",
+      danger: true,
+      onConfirm: async () => {
+        await api.admin.apiKeys.revoke(currentToken, keyId);
+        apiKeys = await api.admin.apiKeys.list(currentToken);
+      },
+    });
   };
 
   const createWebhook = async () => {
@@ -740,14 +1068,19 @@
     if (!currentToken || !selectedServer()) {
       return;
     }
-    if (!confirm(`Remove sub-user ${userId}?`)) {
-      return;
-    }
-    serverMembers = await api.servers.members.remove(
-      currentToken,
-      selectedServer()!.id,
-      userId,
-    );
+    openConfirm({
+      title: "Remove sub-user access",
+      description: `Remove delegated access for ${userId} from ${selectedServer()!.name}?`,
+      confirmLabel: "Remove access",
+      danger: true,
+      onConfirm: async () => {
+        serverMembers = await api.servers.members.remove(
+          currentToken,
+          selectedServer()!.id,
+          userId,
+        );
+      },
+    });
   };
 
   const createDomainMapping = async () => {
@@ -796,6 +1129,14 @@
       return;
     }
     sftpCredential = await api.servers.rotateSftp(currentToken, selectedServer()!.id);
+    revealSecret({
+      title: "Rotated SFTP credential",
+      subtitle: `New password for ${sftpCredential.username}`,
+      secret: sftpCredential.password,
+      warning:
+        "Copy this SFTP password now. The standard server detail view keeps credentials masked after rotation.",
+      hint: `${sftpCredential.host}:${sftpCredential.port} · ${sftpCredential.rootPath}`,
+    });
   };
 
   const acknowledgeAlert = async (alertId: string) => {
@@ -832,11 +1173,20 @@
   };
 
   const deleteCloudflareRoute = async (routeId: string) => {
-    if (!currentToken || !confirm("Delete this Cloudflare route from Leviathan?")) {
+    if (!currentToken) {
       return;
     }
-    await api.admin.cloudflare.deleteRoute(currentToken, routeId);
-    cloudflareRoutes = cloudflareRoutes.filter((route) => route.id !== routeId);
+    const route = cloudflareRoutes.find((item) => item.id === routeId);
+    openConfirm({
+      title: "Delete Cloudflare route",
+      description: `Remove ${route?.hostname ?? "this route"} from Leviathan route management?`,
+      confirmLabel: "Delete route",
+      danger: true,
+      onConfirm: async () => {
+        await api.admin.cloudflare.deleteRoute(currentToken, routeId);
+        cloudflareRoutes = cloudflareRoutes.filter((item) => item.id !== routeId);
+      },
+    });
   };
 
   const saveSettings = async () => {
@@ -845,6 +1195,166 @@
     }
     settings = await api.admin.settings.update(currentToken, settings);
   };
+
+  const navigateToView = (viewId: string) => {
+    const aliases: Record<string, View> = {
+      allocations: "nodes",
+      network: "servers",
+      sftp: "servers",
+    };
+    const resolved = aliases[viewId] ?? viewId;
+    if (!views.some((view) => view.id === resolved)) {
+      return;
+    }
+    const target = resolved as View;
+    currentView = target;
+    window.location.hash = `#${target}`;
+  };
+
+  const focusCreateSurface = async (view: View, targetId: string) => {
+    navigateToView(view);
+    await tick();
+    const surface = document.getElementById(targetId);
+    if (!surface) {
+      return;
+    }
+    surface.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+    surface.focus();
+  };
+
+  const handleHeaderSearch = async (value: string) => {
+    if (!value) {
+      return;
+    }
+    const query = value.toLowerCase();
+    const matchingServer = servers.find((server) =>
+      server.name.toLowerCase().includes(query),
+    );
+    if (matchingServer) {
+      await selectServer(matchingServer.id);
+      return;
+    }
+    const matchingView = views.find(
+      (view) =>
+        view.label.toLowerCase().includes(query) ||
+        view.id.toLowerCase().includes(query),
+    );
+    if (matchingView) {
+      navigateToView(matchingView.id);
+    }
+  };
+
+  const openNotifications = () => {
+    navigateToView("alerts");
+  };
+
+  const openProfile = () => {
+    navigateToView("settings");
+  };
+
+  const currentServerMetric = () =>
+    serverMetrics.length ? serverMetrics[serverMetrics.length - 1] : null;
+
+  const formatPercent = (value: number | undefined) =>
+    `${Math.round(value ?? 0)}%`;
+
+  const formatMegabytes = (value: number | undefined) =>
+    `${Math.round(value ?? 0).toLocaleString()} MB`;
+
+  const formatBytes = (value: number) => `${value.toLocaleString()} bytes`;
+
+  const usagePercent = (used: number | undefined, limit: number | undefined) => {
+    if (!limit || limit <= 0) {
+      return 0;
+    }
+    return Math.max(0, Math.min(100, Math.round(((used ?? 0) / limit) * 100)));
+  };
+
+  const latestDaemonVersion = () => {
+    const versions = nodes
+      .map((node) => node.daemonVersion)
+      .filter((version): version is string => Boolean(version));
+    if (!versions.length) {
+      return null;
+    }
+    return versions.sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))[0];
+  };
+
+  const formatNodeCount = () => {
+    const total = nodes.length;
+    if (!total) {
+      return "Awaiting node enrollment";
+    }
+    const online = nodes.filter((node) => node.status === "online").length;
+    return `${online}/${total} nodes online`;
+  };
+
+  const sidebarStatusTone = () => {
+    if (!nodes.length) {
+      return "warning" as const;
+    }
+    if (nodes.some((node) => node.status === "offline")) {
+      return "warning" as const;
+    }
+    return "online" as const;
+  };
+
+  const serverStripTone = (status: string) => {
+    const normalized = status.toLowerCase();
+    if (normalized === "online" || normalized === "running") {
+      return "online";
+    }
+    if (
+      normalized === "starting" ||
+      normalized === "stopping" ||
+      normalized === "installing" ||
+      normalized === "updating"
+    ) {
+      return "updating";
+    }
+    if (normalized === "maintenance" || normalized === "suspended") {
+      return "warning";
+    }
+    return "offline";
+  };
+
+  $: selectedServerRecord =
+    servers.find((server) => server.id === selectedServerId) ?? null;
+
+  $: currentViewTitle =
+    views.find((view) => view.id === currentView)?.label ?? "Overview";
+
+  $: currentViewSubtitle = pageDescriptions[currentView];
+
+  $: sidebarStatusLabel = formatNodeCount();
+
+  $: sidebarStatusVariant = sidebarStatusTone();
+
+  $: activeTopBreadcrumbs = (() => {
+    const groups = new Map<string, string>();
+    for (const group of sidebarGroups) {
+      for (const item of group.items) {
+        groups.set(item.id, group.label);
+      }
+    }
+    return [
+      { label: "Leviathan" },
+      { label: groups.get(currentView) ?? "Main" },
+      { label: currentViewTitle },
+    ];
+  })();
+
+  $: activePageBreadcrumbs =
+    currentView !== "servers" || !selectedServerRecord
+      ? [{ label: "Leviathan" }, { label: currentViewTitle }]
+      : [
+          { label: "Leviathan" },
+          { label: "Servers", href: "#servers" },
+          { label: selectedServerRecord.name },
+        ];
 
   $: if (selectedServerId && currentToken && currentView === "servers") {
     void loadServerDetailData(selectedServerId);
@@ -908,251 +1418,634 @@
     </div>
   </main>
 {:else}
-  <main class="app-shell">
-    <aside class="sidebar">
-      <div>
-        <div class="brand-lockup">
-          <span class="brand-mark" aria-hidden="true"></span>
-          <div>
-            <p class="eyebrow">Leviathan</p>
-            <h2>Control Plane</h2>
-          </div>
-        </div>
-        <p class="sidebar-copy">Command nodes, Docker workloads, console streams, files, backups, and admin operations from the abyss.</p>
-      </div>
-
-      <nav>
-        {#each views as view}
-          <a href={"#" + view.id} class:active={currentView === view.id}>{view.label}</a>
-        {/each}
-      </nav>
-
+  <AppShell>
+    <svelte:fragment slot="sidebar">
+      <SidebarNav
+        groups={sidebarGroups}
+        activeId={currentView}
+        brand="Leviathan"
+        brandTagline="Control Plane"
+        statusLabel={sidebarStatusLabel}
+        statusTone={sidebarStatusVariant}
+        on:navigate={(event) => navigateToView(event.detail)}
+      />
       <div class="sidebar-footer">
         <p>{me?.user.displayName}</p>
         <small>{me?.user.email ?? "Mock session"}</small>
-        <button class="ghost" on:click={() => session.signOut()}>Sign Out</button>
       </div>
-    </aside>
+    </svelte:fragment>
+
+    <svelte:fragment slot="header">
+      <TopHeader
+        title="Leviathan Operations"
+        subtitle="Premium infrastructure controls with Firebase-backed identity and daemon runtime telemetry."
+        breadcrumbs={activeTopBreadcrumbs}
+        bind:searchValue={topSearchValue}
+        on:search={(event) => void handleHeaderSearch(event.detail)}
+        on:notifications={openNotifications}
+        on:profile={openProfile}
+      >
+        <svelte:fragment slot="actions">
+          <button class="ghost" on:click={() => session.signOut()}>Sign Out</button>
+        </svelte:fragment>
+      </TopHeader>
+    </svelte:fragment>
 
     <section class="content">
-      <header class="topbar">
-        <div>
-          <h1>{views.find((view) => view.id === currentView)?.label}</h1>
-          <p>Premium infrastructure controls with Firebase-backed identity and daemon runtime telemetry.</p>
-        </div>
-        {#if error}
-          <p class="inline-error">{error}</p>
-        {/if}
-      </header>
+      <PageHeader
+        title={currentViewTitle}
+        description={currentViewSubtitle}
+        breadcrumbs={activePageBreadcrumbs}
+      >
+        <svelte:fragment slot="actions">
+          {#if currentView === "nodes"}
+            <ActionButton
+              variant="secondary"
+              on:click={() => focusCreateSurface("nodes", "create-node-surface")}
+            >
+              Create Node
+            </ActionButton>
+          {/if}
+          {#if currentView === "users"}
+            <ActionButton variant="ghost" on:click={() => navigateToView("roles")}>Open Roles</ActionButton>
+          {/if}
+          {#if currentView === "roles"}
+            <ActionButton
+              variant="secondary"
+              on:click={() => focusCreateSurface("roles", "create-role-surface")}
+            >
+              Create Role
+            </ActionButton>
+          {/if}
+          {#if currentView === "api-keys"}
+            <ActionButton
+              variant="secondary"
+              on:click={() => focusCreateSurface("api-keys", "create-api-key-surface")}
+            >
+              Create API Key
+            </ActionButton>
+          {/if}
+          {#if currentView === "audit-logs"}
+            <ActionButton variant="ghost" on:click={() => navigateToView("alerts")}>Open Alerts</ActionButton>
+          {/if}
+          {#if currentView === "jobs"}
+            <ActionButton variant="ghost" on:click={() => navigateToView("scheduled-tasks")}>Open Schedules</ActionButton>
+          {/if}
+          {#if currentView === "servers" && selectedServer()}
+            <StatusBadge status={selectedServer()!.status} />
+          {/if}
+        </svelte:fragment>
+      </PageHeader>
+      {#if error}
+        <p class="inline-error">{error}</p>
+      {/if}
 
       {#if loading}
-        <p class="muted">Loading workspace data…</p>
+        <LoadingState
+          title="Loading Leviathan workspace"
+          description="Pulling nodes, servers, templates, and control-plane telemetry into the command deck."
+        />
       {/if}
 
       {#if currentView === "overview" && dashboard}
         <div class="stats-grid">
-          <StatCard label="Nodes" value={dashboard.totals.nodes} detail="Known daemon hosts" />
-          <StatCard label="Servers" value={dashboard.totals.servers} detail="Managed workloads" />
-          <StatCard label="Templates" value={dashboard.totals.templates} detail="Provisioning presets" />
-          <StatCard label="Online" value={dashboard.totals.onlineServers} detail="Running right now" />
+          <StatCard label="Total Servers" value={servers.length} detail="Assigned workloads" />
+          <StatCard label="Online" value={servers.filter((server) => server.status === "running").length} detail="Running workloads" tone="success" />
+          <StatCard label="Offline" value={servers.filter((server) => ["offline", "stopped"].includes(server.status)).length} detail="Not serving traffic" tone="warning" />
+          <StatCard label="Suspended" value={servers.filter((server) => server.suspended).length} detail="Access-restricted workloads" tone="danger" />
+          <StatCard label="Fleet CPU Limit" value={`${servers.reduce((sum, server) => sum + server.limits.cpuPercent, 0)}%`} detail="Configured cap" />
+          <StatCard label="Fleet RAM Limit" value={`${servers.reduce((sum, server) => sum + server.limits.memoryMb, 0).toLocaleString()} MB`} detail="Configured cap" />
+          <StatCard label="Fleet Disk Limit" value={`${servers.reduce((sum, server) => sum + server.limits.diskMb, 0).toLocaleString()} MB`} detail="Configured cap" />
         </div>
-        <div class="two-column">
-          <Card title="Node Overview" subtitle="Heartbeat, maintenance, and runtime status">
-            {#if nodes.length}
+
+        <div class="three-column">
+          <Card title="Quick Actions" subtitle="Move straight to frequent server-management workflows">
+            <div class="button-row">
+              <ActionButton on:click={() => navigateToView("servers")}>Create Server</ActionButton>
+              <ActionButton variant="secondary" on:click={() => { navigateToView("servers"); serverSection = "backups"; }}>
+                View Backups
+              </ActionButton>
+              <ActionButton
+                variant="ghost"
+                on:click={async () => {
+                  navigateToView("servers");
+                  serverSection = "console";
+                  if (selectedServerId) {
+                    await selectServer(selectedServerId);
+                  }
+                }}
+              >
+                Open Console
+              </ActionButton>
+            </div>
+            <div class="list">
+              <div class="list-row">
+                <div>
+                  <strong>Node Reachability</strong>
+                  <small>{nodes.filter((node) => node.status === "online").length}/{nodes.length} daemon nodes online</small>
+                </div>
+                <StatusBadge status={nodes.some((node) => node.status === "offline") ? "warning" : "online"} label={nodes.some((node) => node.status === "offline") ? "Degraded" : "Healthy"} />
+              </div>
+              <div class="list-row">
+                <div>
+                  <strong>Open Alerts</strong>
+                  <small>{alertEvents.filter((alert) => alert.status === "open").length} unacknowledged events</small>
+                </div>
+                <StatusBadge status={alertEvents.some((alert) => alert.status === "open") ? "warning" : "online"} label={alertEvents.some((alert) => alert.status === "open") ? "Action Needed" : "Clear"} />
+              </div>
+              <div class="list-row">
+                <div>
+                  <strong>Recent Crashes</strong>
+                  <small>{servers.filter((server) => server.crashCount > 0).length} workloads with crash history</small>
+                </div>
+                <StatusBadge status={servers.some((server) => server.crashCount > 0) ? "warning" : "online"} label={servers.some((server) => server.crashCount > 0) ? "Review" : "Stable"} />
+              </div>
+            </div>
+          </Card>
+
+          <Card title="Recent Activity" subtitle="Latest operational actions and events">
+            {#if auditLogs.length}
+              <div class="table-surface">
+                <div class="table-scroll">
+                  <table class="lv-table">
+                    <thead>
+                      <tr>
+                        <th>Action</th>
+                        <th>Actor</th>
+                        <th>Target</th>
+                        <th class="cell-right">Timestamp</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each auditLogs.slice(0, 6) as log}
+                        <tr>
+                          <td><strong>{log.action}</strong></td>
+                          <td class="cell-mono">{log.actorId}</td>
+                          <td class="cell-mono">{log.targetType}:{log.targetId}</td>
+                          <td class="cell-right">{log.createdAt}</td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            {:else}
+              <EmptyState title="No recent activity" description="Runtime actions and admin events will appear here as you manage workloads." />
+            {/if}
+          </Card>
+
+          <Card title="Alerts" subtitle="Thresholds, failures, and safety events">
+            {#if alertEvents.length}
               <div class="list">
-                {#each nodes as node}
-                  <button class="server-list-item" on:click={() => loadNodeConfig(node.id)}>
+                {#each alertEvents.slice(0, 6) as alert}
+                  <div class="list-row">
                     <div>
-                      <strong>{node.name}</strong>
-                      <small>{node.region} • {node.publicAddress}</small>
+                      <strong>{alert.type}</strong>
+                      <small>{alert.message}</small>
                     </div>
-                    <span class="status-pill">{node.status}</span>
-                  </button>
+                    <StatusBadge status={alert.status === "open" ? "warning" : "online"} label={alert.status} />
+                  </div>
                 {/each}
               </div>
             {:else}
-              <EmptyState title="No nodes connected yet" description="Create your first node to generate bootstrap credentials and bring a daemon online." />
-            {/if}
-          </Card>
-          <Card title="Recent Fleet" subtitle="Quick jump into server details">
-            {#if servers.length}
-              <div class="list">
-                {#each servers as server}
-                  <button class="server-list-item" on:click={() => selectServer(server.id)}>
-                    <div>
-                      <strong>{server.name}</strong>
-                      <small>{server.nodeId} • {server.templateId}</small>
-                    </div>
-                    <span class="status-pill">{server.status}</span>
-                  </button>
-                {/each}
-              </div>
-            {:else}
-              <EmptyState title="No servers provisioned yet" description="Use the server creation form to launch your first Docker workload or game server from a template." />
+              <EmptyState title="No active alerts" description="Leviathan will surface node and server incidents here when they occur." />
             {/if}
           </Card>
         </div>
+
+        <Card title="Recent Servers" subtitle="Operational posture across your newest workloads">
+          {#if servers.length}
+            <div class="table-surface">
+              <div class="table-scroll">
+                <table class="lv-table">
+                  <thead>
+                    <tr>
+                      <th>Server</th>
+                      <th>Status</th>
+                      <th>Node</th>
+                      <th>Allocation</th>
+                      <th class="cell-numeric">CPU</th>
+                      <th class="cell-numeric">RAM</th>
+                      <th class="cell-numeric">Disk</th>
+                      <th class="cell-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each servers.slice(0, 8) as server}
+                      <tr>
+                        <td>
+                          <strong>{server.name}</strong>
+                          <small>{server.templateId}</small>
+                        </td>
+                        <td><StatusBadge status={server.status} /></td>
+                        <td class="cell-mono">{server.nodeId}</td>
+                        <td class="cell-mono">{server.allocations[0] ? `${server.allocations[0].ip}:${server.allocations[0].port}` : "unassigned"}</td>
+                        <td class="cell-numeric">{server.limits.cpuPercent}%</td>
+                        <td class="cell-numeric">{server.limits.memoryMb.toLocaleString()} MB</td>
+                        <td class="cell-numeric">{server.limits.diskMb.toLocaleString()} MB</td>
+                        <td class="cell-right">
+                          <div class="button-row">
+                            <ActionButton variant="ghost" on:click={() => selectServer(server.id)}>Open</ActionButton>
+                            <ActionButton variant="secondary" on:click={() => powerServerById(server.id, "restart")}>Restart</ActionButton>
+                          </div>
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          {:else}
+            <EmptyState title="No servers provisioned yet" description="Create a server from a template to unlock console, files, backups, and runtime controls." />
+          {/if}
+        </Card>
       {/if}
 
       {#if currentView === "servers"}
-        <div class="detail-layout">
-          <Card title="Fleet" subtitle="Select a workload">
-            {#if servers.length}
-              <div class="list">
-                {#each servers as server}
-                  <button class:selected={selectedServerId === server.id} class="server-list-item" on:click={() => selectServer(server.id)}>
-                    <div>
-                      <strong>{server.name}</strong>
-                      <small>{server.dockerImage}</small>
-                    </div>
-                    <span class="status-pill">{server.status}</span>
-                  </button>
-                {/each}
+        <div class="stats-grid">
+          <StatCard label="Servers" value={servers.length} detail="Total managed workloads" />
+          <StatCard label="Running" value={servers.filter((server) => server.status === "running").length} detail="Live runtime containers" tone="success" />
+          <StatCard label="Starting/Stopping" value={servers.filter((server) => ["starting", "stopping"].includes(server.status)).length} detail="Transitioning runtime state" tone="warning" />
+          <StatCard label="Suspended" value={servers.filter((server) => server.suspended).length} detail="Restricted workloads" tone="danger" />
+        </div>
+
+        <div class="two-column">
+          <Card title="Server Inventory" subtitle="Switch between compact card and table layout">
+            <svelte:fragment slot="actions">
+              <div class="button-row">
+                <ActionButton
+                  variant={serverListMode === "cards" ? "secondary" : "ghost"}
+                  on:click={() => (serverListMode = "cards")}
+                >
+                  Cards
+                </ActionButton>
+                <ActionButton
+                  variant={serverListMode === "table" ? "secondary" : "ghost"}
+                  on:click={() => (serverListMode = "table")}
+                >
+                  Table
+                </ActionButton>
               </div>
+            </svelte:fragment>
+            {#if servers.length}
+              {#if serverListMode === "cards"}
+                <div class="list">
+                  {#each servers as server}
+                    <div class="list-row server-row-card">
+                      <button class:selected={selectedServerId === server.id} class="server-list-item" on:click={() => selectServer(server.id)}>
+                        <div>
+                          <strong>{server.name}</strong>
+                          <small>{server.allocations[0] ? `${server.allocations[0].ip}:${server.allocations[0].port}` : "No allocation"} • {server.nodeId}</small>
+                        </div>
+                        <StatusBadge status={server.status} />
+                      </button>
+                      <span class={`status-strip status-strip-${serverStripTone(server.status)}`} aria-hidden="true"></span>
+                      <div class="button-row">
+                        <ActionButton variant="ghost" on:click={() => powerServerById(server.id, "start")}>Start</ActionButton>
+                        <ActionButton variant="ghost" on:click={() => powerServerById(server.id, "restart")}>Restart</ActionButton>
+                        <ActionButton variant="ghost" on:click={() => powerServerById(server.id, "stop")}>Stop</ActionButton>
+                        <ActionButton variant="secondary" on:click={() => selectServer(server.id)}>Console</ActionButton>
+                      </div>
+                    </div>
+                  {/each}
+                </div>
+              {:else}
+                <div class="table-surface">
+                  <div class="table-scroll">
+                    <table class="lv-table">
+                      <thead>
+                        <tr>
+                          <th>Server</th>
+                          <th>Status</th>
+                          <th>Node</th>
+                          <th>Allocation</th>
+                          <th class="cell-numeric">CPU</th>
+                          <th class="cell-numeric">RAM</th>
+                          <th class="cell-numeric">Disk</th>
+                          <th class="cell-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {#each servers as server}
+                          <tr class:selected={selectedServerId === server.id}>
+                            <td>
+                              <strong>{server.name}</strong>
+                              <small>{server.dockerImage}</small>
+                            </td>
+                            <td>
+                              <div class="status-with-strip">
+                                <span class={`status-strip status-strip-${serverStripTone(server.status)}`} aria-hidden="true"></span>
+                                <StatusBadge status={server.status} />
+                              </div>
+                            </td>
+                            <td class="cell-mono">{server.nodeId}</td>
+                            <td class="cell-mono">{server.allocations[0] ? `${server.allocations[0].ip}:${server.allocations[0].port}` : "No allocation"}</td>
+                            <td class="cell-numeric">{server.limits.cpuPercent}%</td>
+                            <td class="cell-numeric">{server.limits.memoryMb.toLocaleString()} MB</td>
+                            <td class="cell-numeric">{server.limits.diskMb.toLocaleString()} MB</td>
+                            <td class="cell-right">
+                              <div class="button-row">
+                                <ActionButton variant="ghost" on:click={() => selectServer(server.id)}>Open</ActionButton>
+                                <ActionButton variant="secondary" on:click={() => powerServerById(server.id, "restart")}>Restart</ActionButton>
+                                <ActionButton variant="danger" on:click={() => powerServerById(server.id, "stop")}>Stop</ActionButton>
+                              </div>
+                            </td>
+                          </tr>
+                        {/each}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              {/if}
             {:else}
               <EmptyState title="No workloads in the fleet" description="Create a server from a template to unlock console, files, backups, network, and environment controls." />
             {/if}
           </Card>
 
-          <div class="detail-main">
-            <Card title="Create Server" subtitle="Template-aware provisioning">
-              <div class="form-grid">
-                <label>Name<input bind:value={createServerForm.name} /></label>
-                <label>Description<input bind:value={createServerForm.description} /></label>
-                <label>
-                  Template
-                  <select bind:value={createServerForm.templateId} on:change={(event) => applyTemplateDefaults((event.currentTarget as HTMLSelectElement).value)}>
-                    {#each templates as template}
-                      <option value={template.id}>{template.name}</option>
-                    {/each}
-                  </select>
-                </label>
-                <label>
-                  Node
-                  <select bind:value={createServerForm.nodeId}>
-                    {#each nodes as node}
-                      <option value={node.id}>{node.name}</option>
-                    {/each}
-                  </select>
-                </label>
-                <label>Docker Image<input bind:value={createServerForm.dockerImage} /></label>
-                <label>Startup Command<input bind:value={createServerForm.startupCommand} /></label>
-                <label>Allocation IP<input bind:value={createServerForm.allocationIp} /></label>
-                <label>Allocation Port<input bind:value={createServerForm.allocationPort} /></label>
-                <label>CPU %<input bind:value={createServerForm.cpuPercent} /></label>
-                <label>Memory MB<input bind:value={createServerForm.memoryMb} /></label>
-                <label>Disk MB<input bind:value={createServerForm.diskMb} /></label>
-              </div>
-              <div class="env-editor">
-                {#each Object.entries(createServerForm.environment) as [key, value]}
-                  <label>{key}<input value={value} on:input={(event) => (createServerForm.environment[key] = (event.currentTarget as HTMLInputElement).value)} /></label>
+          <Card title="Create Server" subtitle="Template-aware provisioning with environment defaults">
+            <div class="form-grid">
+              <label>Name<input bind:value={createServerForm.name} /></label>
+              <label>Description<input bind:value={createServerForm.description} /></label>
+              <label>
+                Template
+                <select bind:value={createServerForm.templateId} on:change={(event) => applyTemplateDefaults((event.currentTarget as HTMLSelectElement).value)}>
+                  {#each templates as template}
+                    <option value={template.id}>{template.name}</option>
+                  {/each}
+                </select>
+              </label>
+              <label>
+                Node
+                <select bind:value={createServerForm.nodeId}>
+                  {#each nodes as node}
+                    <option value={node.id}>{node.name}</option>
+                  {/each}
+                </select>
+              </label>
+              <label>Docker Image<input bind:value={createServerForm.dockerImage} /></label>
+              <label>Startup Command<input bind:value={createServerForm.startupCommand} /></label>
+              <label>Allocation IP<input bind:value={createServerForm.allocationIp} /></label>
+              <label>Allocation Port<input bind:value={createServerForm.allocationPort} /></label>
+              <label>CPU %<input bind:value={createServerForm.cpuPercent} /></label>
+              <label>Memory MB<input bind:value={createServerForm.memoryMb} /></label>
+              <label>Disk MB<input bind:value={createServerForm.diskMb} /></label>
+            </div>
+            <div class="env-editor">
+              {#each Object.entries(createServerForm.environment) as [key, value]}
+                <label>{key}<input value={value} on:input={(event) => (createServerForm.environment[key] = (event.currentTarget as HTMLInputElement).value)} /></label>
+              {/each}
+            </div>
+            <ActionButton on:click={createServer}>Create Server</ActionButton>
+            {#if validationErrors.length}
+              <div class="validation-list">
+                {#each validationErrors as item}
+                  <p>{item.key}: {item.message}</p>
                 {/each}
               </div>
-              <button on:click={createServer}>Create Server</button>
-              {#if validationErrors.length}
-                <div class="validation-list">
-                  {#each validationErrors as item}
-                    <p>{item.key}: {item.message}</p>
+            {/if}
+          </Card>
+        </div>
+
+        {#if selectedServer()}
+          <Card title={selectedServer()!.name} subtitle={selectedServer()!.description ?? selectedServer()!.dockerImage}>
+            <svelte:fragment slot="actions">
+              <div class="button-row">
+                <StatusBadge status={selectedServer()!.status} />
+                <ActionButton on:click={() => powerServer("start")}>Start</ActionButton>
+                <ActionButton variant="secondary" on:click={() => powerServer("restart")}>Restart</ActionButton>
+                <ActionButton variant="secondary" on:click={() => powerServer("stop")}>Stop</ActionButton>
+                <ActionButton variant="danger" on:click={() => powerServer("kill")}>Kill</ActionButton>
+              </div>
+            </svelte:fragment>
+
+            <p class="muted">Servers / {selectedServer()!.name} / {serverSection}</p>
+
+            <div class="metrics-grid">
+              <StatCard label="Address" value={selectedServer()!.allocations[0] ? `${selectedServer()!.allocations[0].ip}:${selectedServer()!.allocations[0].port}` : "unassigned"} detail="Primary allocation" />
+              <StatCard label="Uptime" value={`${selectedServer()!.uptimeSeconds}s`} detail="Current lifecycle" />
+              <StatCard label="CPU Load" value={formatPercent(currentServerMetric()?.values.cpuPercent)} detail={`${selectedServer()!.limits.cpuPercent}% limit`} />
+              <StatCard label="Memory" value={formatMegabytes(currentServerMetric()?.values.memoryUsedMb)} detail={`${selectedServer()!.limits.memoryMb} MB limit`} />
+              <StatCard label="Disk" value={formatMegabytes(currentServerMetric()?.values.diskUsedMb)} detail={`${selectedServer()!.limits.diskMb} MB limit`} />
+              <StatCard label="Network In" value={formatMegabytes(currentServerMetric()?.values.networkInMb)} detail="Inbound throughput" tone="success" />
+              <StatCard label="Network Out" value={formatMegabytes(currentServerMetric()?.values.networkOutMb)} detail="Outbound throughput" />
+              <StatCard label="Crashes" value={selectedServer()!.crashCount} detail={selectedServer()!.lastCrashAt ?? "No crash events"} tone={selectedServer()!.crashCount > 0 ? "warning" : "neutral"} />
+            </div>
+
+            <div class="metrics-grid">
+              <Card compact title="CPU Pressure" subtitle="Current usage against provisioned limit">
+                <ProgressBar
+                  label={`${currentServerMetric()?.values.cpuPercent ?? 0}% of ${selectedServer()!.limits.cpuPercent}%`}
+                  value={usagePercent(currentServerMetric()?.values.cpuPercent, selectedServer()!.limits.cpuPercent)}
+                  tone={usagePercent(currentServerMetric()?.values.cpuPercent, selectedServer()!.limits.cpuPercent) > 85 ? "warning" : "primary"}
+                />
+              </Card>
+              <Card compact title="Memory Pressure" subtitle="Live memory consumption">
+                <ProgressBar
+                  label={`${Math.round(currentServerMetric()?.values.memoryUsedMb ?? 0)} MB of ${selectedServer()!.limits.memoryMb} MB`}
+                  value={usagePercent(currentServerMetric()?.values.memoryUsedMb, selectedServer()!.limits.memoryMb)}
+                  tone={usagePercent(currentServerMetric()?.values.memoryUsedMb, selectedServer()!.limits.memoryMb) > 85 ? "warning" : "success"}
+                />
+              </Card>
+              <Card compact title="Disk Pressure" subtitle="Writable volume occupancy">
+                <ProgressBar
+                  label={`${Math.round(currentServerMetric()?.values.diskUsedMb ?? 0)} MB of ${selectedServer()!.limits.diskMb} MB`}
+                  value={usagePercent(currentServerMetric()?.values.diskUsedMb, selectedServer()!.limits.diskMb)}
+                  tone={usagePercent(currentServerMetric()?.values.diskUsedMb, selectedServer()!.limits.diskMb) > 90 ? "danger" : "primary"}
+                />
+              </Card>
+            </div>
+
+            <TabNav
+              tabs={serverSections}
+              active={serverSection}
+              on:change={(event) => (serverSection = event.detail as ServerSection)}
+            />
+
+            {#if serverSection === "console"}
+              <Card tone="console" compact title="Live Console" subtitle="ANSI output stream, command history, and runtime command input">
+                <div class="console-toolbar">
+                  <input placeholder="Search console output" bind:value={consoleSearch} />
+                  <label class="checkbox"><input type="checkbox" bind:checked={autoScroll} /> Auto-scroll</label>
+                  <ActionButton variant="ghost" on:click={() => (consoleLines = [])}>Clear</ActionButton>
+                  <ActionButton
+                    variant="ghost"
+                    on:click={async () => {
+                      const latestError = [...consoleLines]
+                        .reverse()
+                        .find((line) => /error|fail|exception/i.test(line));
+                      if (latestError && navigator.clipboard) {
+                        await navigator.clipboard.writeText(latestError);
+                      }
+                    }}
+                  >
+                    Copy Latest Error
+                  </ActionButton>
+                </div>
+                <div class="console">
+                  {#each consoleLines.filter((line) => !consoleSearch || line.toLowerCase().includes(consoleSearch.toLowerCase())) as line}
+                    <pre>{line}</pre>
                   {/each}
                 </div>
-              {/if}
-            </Card>
-
-            {#if selectedServer()}
-              <Card title={selectedServer()!.name} subtitle={selectedServer()!.dockerImage}>
-                <svelte:fragment slot="actions">
-                  <div class="button-row">
-                    <button on:click={() => powerServer("start")}>Start</button>
-                    <button class="ghost" on:click={() => powerServer("restart")}>Restart</button>
-                    <button class="ghost" on:click={() => powerServer("stop")}>Stop</button>
-                    <button class="ghost danger" on:click={() => powerServer("kill")}>Kill</button>
-                  </div>
-                </svelte:fragment>
-
-                <div class="subnav">
-                  {#each serverSections as section}
-                    <button class:ghost={serverSection !== section.id} on:click={() => (serverSection = section.id)}>
-                      {section.label}
-                    </button>
-                  {/each}
+                <div class="button-row">
+                  <input
+                    placeholder="Enter command"
+                    bind:value={consoleCommand}
+                    on:keydown={(event) => event.key === "Enter" && void sendConsoleCommand()}
+                  />
+                  <ActionButton on:click={sendConsoleCommand}>Send Command</ActionButton>
                 </div>
-
-                {#if serverSection === "console"}
-                  <div class="console-toolbar">
-                    <input placeholder="Search console output" bind:value={consoleSearch} />
-                    <label class="checkbox"><input type="checkbox" bind:checked={autoScroll} /> Auto-scroll</label>
-                  </div>
-                  <div class="console">
-                    {#each consoleLines.filter((line) => !consoleSearch || line.toLowerCase().includes(consoleSearch.toLowerCase())) as line}
-                      <pre>{line}</pre>
+                {#if commandHistory.length}
+                  <div class="history">
+                    {#each commandHistory as item}
+                      <ActionButton variant="ghost" on:click={() => (consoleCommand = item)}>{item}</ActionButton>
                     {/each}
                   </div>
-                  <div class="button-row">
-                    <input placeholder="Enter command" bind:value={consoleCommand} on:keydown={(event) => event.key === "Enter" && void sendConsoleCommand()} />
-                    <button on:click={sendConsoleCommand}>Send</button>
-                  </div>
-                  {#if commandHistory.length}
-                    <div class="history">
-                      {#each commandHistory as item}
-                        <button class="ghost" on:click={() => (consoleCommand = item)}>{item}</button>
-                      {/each}
-                    </div>
-                  {/if}
                 {/if}
+              </Card>
+            {/if}
 
-                {#if serverSection === "files"}
+            {#if serverSection === "files"}
+              <div class="two-column">
+                <Card title="File Manager" subtitle={`Path: ${currentPath}`}>
                   <div class="button-row">
-                    <button class="ghost" on:click={() => browseFiles(".")}>Root</button>
-                    <button class="ghost" on:click={() => api.servers.files.createFolder(currentToken!, selectedServer()!.id, `${currentPath === "." ? "" : `${currentPath}/`}new-folder`).then(() => browseFiles(currentPath))}>New Folder</button>
+                    <ActionButton variant="ghost" on:click={() => browseFiles(".")}>Root</ActionButton>
+                    <ActionButton
+                      variant="secondary"
+                      on:click={() =>
+                        api.servers.files
+                          .createFolder(
+                            currentToken!,
+                            selectedServer()!.id,
+                            `${currentPath === "." ? "" : `${currentPath}/`}new-folder`,
+                          )
+                          .then(() => browseFiles(currentPath))}
+                    >
+                      New Folder
+                    </ActionButton>
                     <input type="file" on:change={uploadFile} />
                   </div>
-                  <div class="file-grid">
-                    <div class="list">
-                      {#each serverFiles as file}
-                        <button class="server-list-item" on:click={() => (file.isDirectory ? browseFiles(file.path) : openFile(file.path))}>
-                          <div>
-                            <strong>{file.name}</strong>
-                            <small>{file.isDirectory ? "Directory" : `${file.size} bytes`}</small>
-                          </div>
-                          <span class="status-pill">{file.modifiedAt.slice(0, 10)}</span>
-                        </button>
-                      {/each}
-                    </div>
-                    <div>
-                      <p class="muted">Editing: {currentFilePath || "No file selected"}</p>
-                      <textarea class="editor" bind:value={fileEditorContent}></textarea>
-                      <div class="button-row">
-                        <button on:click={saveFile}>Save File</button>
-                        {#if currentFilePath}
-                          <button class="ghost danger" on:click={() => api.servers.files.remove(currentToken!, selectedServer()!.id, currentFilePath).then(() => { currentFilePath = ""; fileEditorContent = ""; return browseFiles(currentPath); })}>Delete</button>
-                        {/if}
+                  {#if serverFiles.length}
+                    <div class="table-surface">
+                      <div class="table-scroll">
+                        <table class="lv-table">
+                          <thead>
+                            <tr>
+                              <th>Name</th>
+                              <th>Type</th>
+                              <th class="cell-numeric">Size</th>
+                              <th>Modified</th>
+                              <th class="cell-right">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {#each serverFiles as file}
+                              <tr>
+                                <td class="cell-mono">{file.name}</td>
+                                <td>{file.isDirectory ? "Directory" : "File"}</td>
+                                <td class="cell-numeric">{file.isDirectory ? "-" : formatBytes(file.size)}</td>
+                                <td>{file.modifiedAt}</td>
+                                <td class="cell-right">
+                                  <div class="button-row">
+                                    <ActionButton
+                                      variant="ghost"
+                                      on:click={() =>
+                                        file.isDirectory
+                                          ? browseFiles(file.path)
+                                          : openFile(file.path)}
+                                    >
+                                      {file.isDirectory ? "Open" : "Edit"}
+                                    </ActionButton>
+                                    {#if !file.isDirectory}
+                                      <ActionButton
+                                        variant="secondary"
+                                        on:click={() => downloadFile(file.path)}
+                                      >
+                                        Download
+                                      </ActionButton>
+                                      <ActionButton
+                                        variant="danger"
+                                        on:click={() => confirmDeleteFile(file.path)}
+                                      >
+                                        Delete
+                                      </ActionButton>
+                                    {/if}
+                                  </div>
+                                </td>
+                              </tr>
+                            {/each}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
-                  </div>
-                {/if}
-
-                {#if serverSection === "backups"}
+                  {:else}
+                    <EmptyState title="Folder is empty" description="Upload files or create a folder to begin managing this workspace." />
+                  {/if}
+                </Card>
+                <Card title="Editor" subtitle={currentFilePath || "Select a file from the list"}>
+                  <textarea class="editor" bind:value={fileEditorContent}></textarea>
                   <div class="button-row">
-                    <button on:click={createBackup}>Create Backup</button>
+                    <ActionButton on:click={saveFile} disabled={!currentFilePath}>Save File</ActionButton>
+                    <ActionButton
+                      variant="danger"
+                      disabled={!currentFilePath}
+                      on:click={() => currentFilePath && confirmDeleteFile(currentFilePath)}
+                    >
+                      Delete File
+                    </ActionButton>
                   </div>
-                  <div class="list">
-                    {#each serverBackups as backup}
-                      <div class="list-row">
-                        <div>
-                          <strong>{backup.name}</strong>
-                          <small>{backup.status} • {backup.sizeBytes} bytes</small>
-                        </div>
-                        <div class="button-row">
-                          <button class="ghost" on:click={() => downloadBackup(backup.id)}>Download</button>
-                          <button class="ghost" on:click={() => restoreBackup(backup.id)}>Restore</button>
-                          <button class="ghost danger" on:click={() => deleteBackup(backup.id)}>Delete</button>
-                        </div>
-                      </div>
-                    {/each}
-                  </div>
-                {/if}
+                </Card>
+              </div>
+            {/if}
 
-                {#if serverSection === "schedules"}
+            {#if serverSection === "backups"}
+              <Card title="Backups" subtitle="Create, restore, download, and remove server snapshots">
+                <div class="button-row">
+                  <ActionButton on:click={createBackup}>Create Backup</ActionButton>
+                </div>
+                {#if serverBackups.length}
+                  <div class="table-surface">
+                    <div class="table-scroll">
+                      <table class="lv-table">
+                        <thead>
+                          <tr>
+                            <th>Name</th>
+                            <th>Provider</th>
+                            <th>Status</th>
+                            <th class="cell-numeric">Size</th>
+                            <th>Created</th>
+                            <th class="cell-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {#each serverBackups as backup}
+                            <tr>
+                              <td><strong>{backup.name}</strong></td>
+                              <td>{backup.provider.toUpperCase()}</td>
+                              <td><StatusBadge status={backup.status} /></td>
+                              <td class="cell-numeric">{formatBytes(backup.sizeBytes)}</td>
+                              <td>{backup.createdAt}</td>
+                              <td class="cell-right">
+                                <div class="button-row">
+                                  <ActionButton variant="ghost" on:click={() => downloadBackup(backup.id)}>Download</ActionButton>
+                                  <ActionButton variant="secondary" on:click={() => restoreBackup(backup.id)}>Restore</ActionButton>
+                                  <ActionButton variant="danger" on:click={() => deleteBackup(backup.id)}>Delete</ActionButton>
+                                </div>
+                              </td>
+                            </tr>
+                          {/each}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                {:else}
+                  <EmptyState title="No backups available" description="Create your first backup to unlock restore and download operations." />
+                {/if}
+              </Card>
+            {/if}
+
+            {#if serverSection === "schedules"}
+              <div class="two-column">
+                <Card title="Create Schedule" subtitle="CRON-driven command and power tasks">
                   <div class="form-grid">
                     <label>Name<input bind:value={createTaskForm.name} /></label>
                     <label>CRON<input bind:value={createTaskForm.cron} /></label>
@@ -1177,185 +2070,464 @@
                       <label>Command<input bind:value={createTaskForm.command} /></label>
                     {/if}
                   </div>
-                  <button on:click={createTask}>Create Task</button>
-                  <div class="list">
-                    {#each serverTasks as task}
-                      <div class="list-row">
-                        <div>
-                          <strong>{task.name}</strong>
-                          <small>{task.cron} • {task.action.type}</small>
+                  <ActionButton on:click={createTask}>Create Schedule</ActionButton>
+                </Card>
+                <Card title="Scheduled Tasks" subtitle="Next actions and immediate run controls">
+                  {#if serverTasks.length}
+                    <div class="list">
+                      {#each serverTasks as task}
+                        <div class="list-row">
+                          <div>
+                            <strong>{task.name}</strong>
+                            <small>{task.cron} • {task.action.type} • last run {task.lastRunAt ?? "never"}</small>
+                          </div>
+                          <div class="button-row">
+                            <StatusBadge status={task.enabled ? "online" : "offline"} label={task.enabled ? "Enabled" : "Disabled"} />
+                            <ActionButton variant="ghost" on:click={() => runTask(task.id)}>Run Now</ActionButton>
+                          </div>
                         </div>
-                        <div class="button-row">
-                          <button class="ghost" on:click={() => runTask(task.id)}>Run Now</button>
-                        </div>
-                      </div>
-                    {/each}
-                  </div>
-                {/if}
+                      {/each}
+                    </div>
+                  {:else}
+                    <EmptyState title="No schedules configured" description="Create a recurring task for restarts, console commands, or maintenance workflows." />
+                  {/if}
+                </Card>
+              </div>
+            {/if}
 
-                {#if serverSection === "network"}
+            {#if serverSection === "network"}
+              <div class="two-column">
+                <Card title="Domain Mapping" subtitle="Reverse-proxy routes and allocation overview">
                   <div class="form-grid">
                     <label>Domain<input bind:value={domainForm.domain} /></label>
                     <label>Target Port<input bind:value={domainForm.targetPort} /></label>
-                    <button on:click={createDomainMapping}>Map Domain</button>
                   </div>
-                  <div class="list">
-                    {#each serverDomains as mapping}
-                      <div class="list-row">
-                        <div>
-                          <strong>{mapping.domain}</strong>
-                          <small>{mapping.provider} → :{mapping.targetPort}</small>
-                        </div>
-                        <span class="status-pill">{mapping.enabled ? "Enabled" : "Disabled"}</span>
+                  <div class="button-row">
+                    <ActionButton on:click={createDomainMapping}>Map Domain</ActionButton>
+                  </div>
+                  {#if serverDomains.length}
+                    <div class="table-surface">
+                      <div class="table-scroll">
+                        <table class="lv-table">
+                          <thead>
+                            <tr>
+                              <th>Domain</th>
+                              <th>Provider</th>
+                              <th class="cell-numeric">Port</th>
+                              <th>Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {#each serverDomains as mapping}
+                              <tr>
+                                <td class="cell-mono">{mapping.domain}</td>
+                                <td>{mapping.provider}</td>
+                                <td class="cell-numeric">{mapping.targetPort}</td>
+                                <td><StatusBadge status={mapping.enabled ? "synced" : "out-of-sync"} label={mapping.enabled ? "Enabled" : "Disabled"} /></td>
+                              </tr>
+                            {/each}
+                          </tbody>
+                        </table>
                       </div>
-                    {/each}
-                  </div>
+                    </div>
+                  {:else}
+                    <EmptyState title="No domain mappings" description="Add a hostname route to expose this server through your proxy provider." />
+                  {/if}
+                </Card>
+
+                <Card title="Firewall + SFTP" subtitle="Port policies, daemon apply modes, and SFTP credentials">
                   <div class="form-grid">
                     <label>Protocol<select bind:value={firewallForm.protocol}><option value="tcp">TCP</option><option value="udp">UDP</option></select></label>
                     <label>Port<input bind:value={firewallForm.port} /></label>
                     <label>Source<input bind:value={firewallForm.source} /></label>
                     <label>Action<select bind:value={firewallForm.action}><option value="allow">Allow</option><option value="deny">Deny</option></select></label>
-                    <button on:click={createFirewallRule}>Add Firewall Rule</button>
-                    <button class="ghost" on:click={() => applyFirewallRules(true)}>Dry Run Rules</button>
-                    <button class="ghost danger" on:click={() => confirm("Apply firewall rules on the daemon node?") && applyFirewallRules(false)}>Apply Rules</button>
                   </div>
-                  <div class="list">
-                    {#each serverFirewallRules as rule}
-                      <div class="list-row">
-                        <strong>{rule.action.toUpperCase()} {rule.protocol}/{rule.port}</strong>
-                        <small>{rule.source}</small>
-                      </div>
-                    {/each}
+                  <div class="button-row">
+                    <ActionButton variant="secondary" on:click={createFirewallRule}>Add Rule</ActionButton>
+                    <ActionButton variant="ghost" on:click={() => applyFirewallRules(true)}>Dry Run</ActionButton>
+                    <ActionButton
+                      variant="danger"
+                      on:click={() =>
+                        openConfirm({
+                          title: "Apply firewall rules",
+                          description:
+                            "Push the current firewall policy to the daemon node now? Incorrect rules can break connectivity.",
+                          confirmLabel: "Apply rules",
+                          danger: true,
+                          onConfirm: async () => {
+                            await applyFirewallRules(false);
+                          },
+                        })}
+                    >
+                      Apply
+                    </ActionButton>
                   </div>
-                  <div class="list">
-                    {#each selectedServer()!.allocations as allocation}
-                      <div class="list-row">
-                        <div>
-                          <strong>{allocation.ip}:{allocation.port}</strong>
-                          <small>{allocation.ipv6 ?? "IPv4 only"}</small>
+                  {#if serverFirewallRules.length}
+                    <div class="list">
+                      {#each serverFirewallRules as rule}
+                        <div class="list-row">
+                          <div>
+                            <strong>{rule.action.toUpperCase()} {rule.protocol}/{rule.port}</strong>
+                            <small>{rule.source}</small>
+                          </div>
+                          <StatusBadge status={rule.enabled ? "applied" : "warning"} label={rule.enabled ? "Enabled" : "Disabled"} />
                         </div>
-                        <span class="status-pill">{allocation.primary ? "Primary" : "Secondary"}</span>
-                      </div>
-                    {/each}
-                  </div>
-                  {#if sftpCredential}
-                    <p class="token-box">SFTP: {sftpCredential.username}@{sftpCredential.host}:{sftpCredential.port}</p>
-                    <button class="ghost" on:click={rotateSftp}>Rotate SFTP Credential</button>
+                      {/each}
+                    </div>
                   {/if}
-                {/if}
+                  {#if sftpCredential}
+                    <div class="inline-warning">
+                      <strong>SFTP access details</strong>
+                      <p>
+                        {sftpCredential.username}@{sftpCredential.host}:{sftpCredential.port}
+                        {" · "}
+                        {sftpCredential.rootPath}
+                      </p>
+                    </div>
+                    <ActionButton variant="ghost" on:click={rotateSftp}>Rotate SFTP Credential</ActionButton>
+                  {/if}
+                </Card>
+              </div>
 
-                {#if serverSection === "environment"}
-                  <div class="env-editor">
-                    {#each selectedServer()!.environmentDefinitions as definition}
-                      <label>
-                        {definition.key}
-                        <input
-                          type={definition.secret ? "password" : "text"}
-                          value={selectedServer()!.environment[definition.key] ?? ""}
-                          readonly={definition.readonly}
-                          on:input={(event) => {
-                            const server = selectedServer();
-                            if (server) {
-                              server.environment[definition.key] = (event.currentTarget as HTMLInputElement).value;
-                            }
-                          }}
-                        />
-                      </label>
-                    {/each}
-                  </div>
-                  <button on:click={updateServerEnvironment}>Save Environment</button>
-                {/if}
-
-                {#if serverSection === "sub-users"}
-                  <div class="form-grid">
-                    <label>User ID<input bind:value={subUserForm.userId} /></label>
-                    <label>Permissions<input bind:value={subUserForm.permissions} /></label>
-                    <button on:click={addSubUser}>Add Sub-user</button>
-                  </div>
-                  <div class="list">
-                    {#each serverMembers as member}
-                      <div class="list-row">
-                        <div>
-                          <strong>{member.userId}</strong>
-                          <small>{member.permissions.join(", ")}</small>
-                        </div>
-                        <button class="ghost danger" on:click={() => removeSubUser(member.userId)}>Remove</button>
-                      </div>
-                    {/each}
-                  </div>
-                {/if}
-
-                {#if serverSection === "settings"}
-                  <div class="metrics-grid">
-                    <StatCard label="CPU" value={selectedServer()!.limits.cpuPercent + "%"} detail="Assigned limit" />
-                    <StatCard label="Memory" value={selectedServer()!.limits.memoryMb + " MB"} detail="Assigned limit" />
-                    <StatCard label="Disk" value={selectedServer()!.limits.diskMb + " MB"} detail="Assigned limit" />
-                    <StatCard label="Crashes" value={selectedServer()!.crashCount} detail="Tracked runtime faults" />
+              <Card title="Allocations" subtitle="Primary and secondary addresses assigned to this server">
+                {#if selectedServer()!.allocations.length}
+                  <div class="table-surface">
+                    <div class="table-scroll">
+                      <table class="lv-table">
+                        <thead>
+                          <tr>
+                            <th>Address</th>
+                            <th>Stack</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {#each selectedServer()!.allocations as allocation}
+                            <tr>
+                              <td class="cell-mono">{allocation.ip}:{allocation.port}</td>
+                              <td>{allocation.ipv6 ?? "IPv4 only"}</td>
+                              <td><StatusBadge status={allocation.primary ? "online" : "starting"} label={allocation.primary ? "Primary" : "Secondary"} /></td>
+                            </tr>
+                          {/each}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 {/if}
               </Card>
             {/if}
-          </div>
-        </div>
+
+            {#if serverSection === "environment"}
+              <Card title="Environment Variables" subtitle="Required and secret values are masked and validated before save">
+                {#if selectedServer()!.environmentDefinitions.length}
+                  <div class="table-surface">
+                    <div class="table-scroll">
+                      <table class="lv-table">
+                        <thead>
+                          <tr>
+                            <th>Key</th>
+                            <th>Value</th>
+                            <th>Flags</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {#each selectedServer()!.environmentDefinitions as definition}
+                            <tr>
+                              <td class="cell-mono">{definition.key}</td>
+                              <td>
+                                <input
+                                  type={definition.secret ? "password" : "text"}
+                                  value={selectedServer()!.environment[definition.key] ?? ""}
+                                  readonly={definition.readonly}
+                                  on:input={(event) => {
+                                    const server = selectedServer();
+                                    if (server) {
+                                      server.environment[definition.key] = (event.currentTarget as HTMLInputElement).value;
+                                    }
+                                  }}
+                                />
+                              </td>
+                              <td>
+                                <div class="button-row">
+                                  <StatusBadge status={definition.required ? "applied" : "dry-run"} label={definition.required ? "Required" : "Optional"} />
+                                  {#if definition.secret}
+                                    <StatusBadge status="warning" label="Secret" />
+                                  {/if}
+                                  {#if definition.readonly}
+                                    <StatusBadge status="maintenance" label="Readonly" />
+                                  {/if}
+                                </div>
+                              </td>
+                            </tr>
+                          {/each}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                {:else}
+                  <EmptyState title="No environment definitions" description="This template has no predefined environment variables." />
+                {/if}
+                <div class="button-row">
+                  <ActionButton on:click={updateServerEnvironment}>Save Environment</ActionButton>
+                </div>
+              </Card>
+            {/if}
+
+            {#if serverSection === "sub-users"}
+              <div class="two-column">
+                <Card title="Invite Sub-user" subtitle="Grant scoped access by user id and permission set">
+                  <div class="form-grid">
+                    <label>User ID<input bind:value={subUserForm.userId} /></label>
+                    <label>Permissions<input bind:value={subUserForm.permissions} /></label>
+                  </div>
+                  <ActionButton on:click={addSubUser}>Add Sub-user</ActionButton>
+                </Card>
+                <Card title="Server Access" subtitle="Current delegated members and permission scopes">
+                  {#if serverMembers.length}
+                    <div class="list">
+                      {#each serverMembers as member}
+                        <div class="list-row">
+                          <div>
+                            <strong>{member.userId}</strong>
+                            <small>{member.permissions.join(", ")}</small>
+                          </div>
+                          <ActionButton variant="danger" on:click={() => removeSubUser(member.userId)}>Remove</ActionButton>
+                        </div>
+                      {/each}
+                    </div>
+                  {:else}
+                    <EmptyState title="No sub-users assigned" description="Add delegated members for console, files, backups, or schedule access." />
+                  {/if}
+                </Card>
+              </div>
+            {/if}
+
+            {#if serverSection === "settings"}
+              <div class="two-column">
+                <Card title="Runtime Settings" subtitle="Startup, image, and resource posture for this workload">
+                  <div class="form-grid">
+                    <label>Startup Command<input value={selectedServer()!.startup.command} readonly /></label>
+                    <label>Docker Image<input value={selectedServer()!.dockerImage} readonly /></label>
+                    <label>CPU Limit<input value={`${selectedServer()!.limits.cpuPercent}%`} readonly /></label>
+                    <label>Memory Limit<input value={`${selectedServer()!.limits.memoryMb} MB`} readonly /></label>
+                    <label>Disk Limit<input value={`${selectedServer()!.limits.diskMb} MB`} readonly /></label>
+                  </div>
+                  <div class="metrics-grid">
+                    <StatCard label="CPU" value={`${selectedServer()!.limits.cpuPercent}%`} detail="Assigned limit" />
+                    <StatCard label="Memory" value={`${selectedServer()!.limits.memoryMb} MB`} detail="Assigned limit" />
+                    <StatCard label="Disk" value={`${selectedServer()!.limits.diskMb} MB`} detail="Assigned limit" />
+                    <StatCard label="Crashes" value={selectedServer()!.crashCount} detail="Tracked runtime faults" tone={selectedServer()!.crashCount > 0 ? "warning" : "neutral"} />
+                  </div>
+                </Card>
+                <Card tone="danger" title="Danger Zone" subtitle="High-impact lifecycle controls for this server">
+                  <div class="button-row">
+                    <ActionButton
+                      variant="danger"
+                      on:click={() =>
+                        openConfirm({
+                          title: "Suspend runtime",
+                          description: `Stop ${selectedServer()!.name} and leave the workload unavailable until it is started again.`,
+                          confirmLabel: "Suspend runtime",
+                          danger: true,
+                          onConfirm: async () => {
+                            await powerServer("stop");
+                          },
+                        })}
+                    >
+                      Suspend Runtime
+                    </ActionButton>
+                    <ActionButton
+                      variant="danger"
+                      on:click={() =>
+                        openConfirm({
+                          title: "Reinstall or restart workload",
+                          description: `Restart ${selectedServer()!.name} now? Use this only when you are ready for a service interruption.`,
+                          confirmLabel: "Restart workload",
+                          danger: true,
+                          onConfirm: async () => {
+                            await powerServer("restart");
+                          },
+                        })}
+                    >
+                      Reinstall/Restart
+                    </ActionButton>
+                    <ActionButton
+                      variant="danger"
+                      on:click={() =>
+                        openConfirm({
+                          title: "Rebuild container",
+                          description: `Kill and rebuild the container for ${selectedServer()!.name}? Active sessions will be dropped immediately.`,
+                          confirmLabel: "Rebuild container",
+                          danger: true,
+                          onConfirm: async () => {
+                            await powerServer("kill");
+                          },
+                        })}
+                    >
+                      Rebuild Container
+                    </ActionButton>
+                    <ActionButton variant="danger" disabled>Delete Server (Protected)</ActionButton>
+                  </div>
+                </Card>
+              </div>
+            {/if}
+          </Card>
+        {/if}
       {/if}
 
       {#if currentView === "nodes"}
         <div class="two-column">
-          <Card title="Node Fleet" subtitle="Maintenance, metrics, and daemon config">
+          <Card title="Node Fleet" subtitle="Maintenance, metrics, and daemon configuration controls">
             {#if nodes.length}
-              <div class="list">
-                {#each nodes as node}
-                  <div class="list-row">
-                    <div>
-                      <strong>{node.name}</strong>
-                      <small>{node.region} • {node.status}</small>
-                    </div>
-                    <div class="button-row">
-                      <button class="ghost" on:click={() => loadNodeConfig(node.id)}>Config</button>
-                      <button class="ghost" on:click={() => toggleNodeMaintenance(node)}>{node.maintenanceMode ? "Disable Maintenance" : "Enable Maintenance"}</button>
-                    </div>
-                  </div>
-                {/each}
+              <div class="table-surface">
+                <div class="table-scroll">
+                  <table class="lv-table">
+                    <thead>
+                      <tr>
+                        <th>Node</th>
+                        <th>Region</th>
+                        <th>Status</th>
+                        <th>Daemon</th>
+                        <th class="cell-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each nodes as node}
+                        <tr>
+                          <td>
+                            <strong>{node.name}</strong>
+                            <small>{node.publicAddress}</small>
+                          </td>
+                          <td>{node.region}</td>
+                          <td>
+                            <StatusBadge status={node.maintenanceMode ? "maintenance" : node.status} label={node.maintenanceMode ? "Maintenance" : node.status} />
+                          </td>
+                          <td>{node.daemonVersion ?? "unknown"}</td>
+                          <td class="cell-right">
+                            <div class="button-row">
+                              <ActionButton variant="ghost" on:click={() => loadNodeConfig(node.id)}>Config</ActionButton>
+                              <ActionButton variant="secondary" on:click={() => toggleNodeMaintenance(node)}>
+                                {node.maintenanceMode ? "Disable Maintenance" : "Enable Maintenance"}
+                              </ActionButton>
+                            </div>
+                          </td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             {:else}
               <EmptyState title="No registered nodes" description="Create a node to generate a bootstrap token, then install the Leviathan daemon on the target Linux host." />
             {/if}
           </Card>
-          <Card title="Add Node" subtitle="Create installer credentials">
-            <label>Name<input bind:value={createNodeForm.name} /></label>
-            <label>Region<input bind:value={createNodeForm.region} /></label>
-            <label>Public Address<input bind:value={createNodeForm.publicAddress} /></label>
-            <label>Panel Base URL<input bind:value={createNodeForm.baseUrl} /></label>
-            <label>Capabilities<input bind:value={createNodeForm.capabilities} /></label>
-            <button on:click={createNode}>Create Node</button>
-            {#if nodeBootstrapToken}
-              <p class="token-box">Bootstrap token: {nodeBootstrapToken}</p>
-            {/if}
-            {#if selectedNodeConfig}
-              <div class="token-box">
-                {#each Object.entries(selectedNodeConfig.env) as [key, value]}
-                  <p>{key}={value}</p>
-                {/each}
+          <div id="create-node-surface" tabindex="-1">
+            <Card title="Add Node" subtitle="Create installer credentials">
+              <div class="form-grid">
+                <label>Name<input bind:value={createNodeForm.name} /></label>
+                <label>Region<input bind:value={createNodeForm.region} /></label>
+                <label>Public Address<input bind:value={createNodeForm.publicAddress} /></label>
+                <label>Panel Base URL<input bind:value={createNodeForm.baseUrl} /></label>
+                <label>Capabilities<input bind:value={createNodeForm.capabilities} /></label>
               </div>
-            {/if}
-          </Card>
+              <ActionButton on:click={createNode}>Create Node</ActionButton>
+              {#if nodeBootstrapToken}
+                <p class="muted">The latest bootstrap token was revealed in a one-time modal and should now be stored with your node deployment notes.</p>
+              {/if}
+              {#if selectedNodeConfig}
+                <div class="token-box">
+                  {#each Object.entries(selectedNodeConfig.env) as [key, value]}
+                    <p>{key}={value}</p>
+                  {/each}
+                </div>
+              {/if}
+            </Card>
+          </div>
         </div>
 
         {#if nodeMetrics.length}
           <Card title="Node Metrics" subtitle="Latest retained points">
-            <div class="list">
-              {#each nodeMetrics as point}
-                <div class="list-row">
-                  <div>
-                    <strong>{point.timestamp}</strong>
-                    <small>CPU {point.values.cpuPercent ?? 0}% • RAM {point.values.memoryUsedMb ?? 0} MB</small>
-                  </div>
-                  <span class="status-pill">{Math.round(point.values.diskUsedMb ?? 0)} MB disk</span>
-                </div>
-              {/each}
+            <div class="table-surface">
+              <div class="table-scroll">
+                <table class="lv-table">
+                  <thead>
+                    <tr>
+                      <th>Timestamp</th>
+                      <th class="cell-numeric">CPU</th>
+                      <th class="cell-numeric">Memory</th>
+                      <th class="cell-numeric">Disk Used</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each nodeMetrics as point}
+                      <tr>
+                        <td>{point.timestamp}</td>
+                        <td class="cell-numeric">{Math.round(point.values.cpuPercent ?? 0)}%</td>
+                        <td class="cell-numeric">{Math.round(point.values.memoryUsedMb ?? 0)} MB</td>
+                        <td class="cell-numeric">{Math.round(point.values.diskUsedMb ?? 0)} MB</td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </Card>
         {/if}
+      {/if}
+
+      {#if currentView === "daemon-updates"}
+        <div class="stats-grid">
+          <StatCard label="Nodes Reporting" value={nodes.length} detail="Nodes with daemon registration" />
+          <StatCard label="Latest Version Seen" value={latestDaemonVersion() ?? "unknown"} detail="Fleet-derived version baseline" tone="primary" />
+          <StatCard label="Updates Needed" value={nodes.filter((node) => latestDaemonVersion() && node.daemonVersion && node.daemonVersion !== latestDaemonVersion()).length} detail="Nodes behind latest seen version" tone="warning" />
+          <StatCard label="Maintenance Nodes" value={nodes.filter((node) => node.maintenanceMode).length} detail="Currently in maintenance mode" />
+        </div>
+        <Card title="Daemon Update Surface" subtitle="Fleet version posture without backend contract changes">
+          {#if nodes.length}
+            <div class="table-surface">
+              <div class="table-scroll">
+                <table class="lv-table">
+                  <thead>
+                    <tr>
+                      <th>Node</th>
+                      <th>Current Version</th>
+                      <th>Status</th>
+                      <th>Update Posture</th>
+                      <th class="cell-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each nodes as node}
+                      <tr>
+                        <td>
+                          <strong>{node.name}</strong>
+                          <small>{node.region} • {node.publicAddress}</small>
+                        </td>
+                        <td>{node.daemonVersion ?? "unknown"}</td>
+                        <td><StatusBadge status={node.maintenanceMode ? "maintenance" : node.status} /></td>
+                        <td>
+                          {#if latestDaemonVersion() && node.daemonVersion && node.daemonVersion !== latestDaemonVersion()}
+                            <StatusBadge status="warning" label="Update Available" />
+                          {:else}
+                            <StatusBadge status="online" label="Current" />
+                          {/if}
+                        </td>
+                        <td class="cell-right">
+                          <ActionButton variant="ghost" on:click={() => loadNodeConfig(node.id)}>View Config</ActionButton>
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          {:else}
+            <EmptyState title="No daemon nodes available" description="Create and bootstrap a node to start collecting daemon version posture." />
+          {/if}
+          <div class="button-row">
+            <ActionButton variant="secondary" on:click={() => navigateToView("nodes")}>Manage Nodes</ActionButton>
+          </div>
+        </Card>
       {/if}
 
       {#if currentView === "templates"}
@@ -1363,51 +2535,58 @@
           <Card title=".env.example Import Preview" subtitle="Parse required variables before saving">
             <textarea bind:value={envImportText} rows="12"></textarea>
             <div class="button-row">
-              <button on:click={importEnvExample}>Parse Import</button>
+              <ActionButton on:click={importEnvExample}>Parse Import</ActionButton>
             </div>
             <div class="env-preview">
               {#each previewDefinitions as definition}
                 <div class="env-row">
                   <strong>{definition.key}</strong>
                   <small>{definition.description ?? definition.displayName}</small>
-                  <span>{definition.secret ? "Secret" : "Visible"}</span>
+                  <StatusBadge status={definition.secret ? "warning" : "online"} label={definition.secret ? "Secret" : "Visible"} />
                 </div>
               {/each}
             </div>
           </Card>
           <Card title="Create Template" subtitle="Images, startup, and env metadata">
-            <label>ID<input bind:value={createTemplateForm.id} /></label>
-            <label>Name<input bind:value={createTemplateForm.name} /></label>
-            <label>Category<input bind:value={createTemplateForm.category} /></label>
-            <label>Description<input bind:value={createTemplateForm.description} /></label>
-            <label>Docker Images<input bind:value={createTemplateForm.dockerImages} /></label>
-            <label>Startup Command<input bind:value={createTemplateForm.startupCommand} /></label>
-            <button on:click={createTemplate}>Save Template</button>
+            <div class="form-grid">
+              <label>ID<input bind:value={createTemplateForm.id} /></label>
+              <label>Name<input bind:value={createTemplateForm.name} /></label>
+              <label>Category<input bind:value={createTemplateForm.category} /></label>
+              <label>Description<input bind:value={createTemplateForm.description} /></label>
+              <label>Docker Images<input bind:value={createTemplateForm.dockerImages} /></label>
+              <label>Startup Command<input bind:value={createTemplateForm.startupCommand} /></label>
+            </div>
+            <ActionButton on:click={createTemplate}>Save Template</ActionButton>
           </Card>
         </div>
         <Card title="Existing Templates" subtitle="Environment-aware templates">
           {#if templates.length}
-            <div class="list">
-              {#each templates as template}
-                <div class="template-block">
-                  <div class="list-row">
-                    <div>
-                      <strong>{template.name}</strong>
-                      <small>{template.description}</small>
-                    </div>
-                    <span class="status-pill">{template.category}</span>
-                  </div>
-                  <div class="env-preview">
-                    {#each template.environmentDefinitions as definition}
-                      <div class="env-row">
-                        <strong>{definition.key}</strong>
-                        <small>{definition.displayName}</small>
-                        <span>{definition.defaultValue ?? "No default"}</span>
-                      </div>
+            <div class="table-surface">
+              <div class="table-scroll">
+                <table class="lv-table">
+                  <thead>
+                    <tr>
+                      <th>Template</th>
+                      <th>Category</th>
+                      <th>Docker Image</th>
+                      <th class="cell-numeric">Env Vars</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each templates as template}
+                      <tr>
+                        <td>
+                          <strong>{template.name}</strong>
+                          <small>{template.description}</small>
+                        </td>
+                        <td><StatusBadge status="synced" label={template.category} /></td>
+                        <td class="cell-mono">{template.dockerImages[0] ?? "n/a"}</td>
+                        <td class="cell-numeric">{template.environmentDefinitions.length}</td>
+                      </tr>
                     {/each}
-                  </div>
-                </div>
-              {/each}
+                  </tbody>
+                </table>
+              </div>
             </div>
           {:else}
             <EmptyState title="No templates saved yet" description="Import a .env.example and create a template to standardize your first workload build." />
@@ -1417,20 +2596,42 @@
 
       {#if currentView === "users"}
         <Card title="Users" subtitle="Firebase-backed identities and role assignment">
-          <div class="list">
-            {#each users as user}
-              <div class="list-row">
-                <div>
-                  <strong>{user.displayName}</strong>
-                  <small>{user.email ?? user.uid}</small>
-                </div>
-                <select on:change={(event) => updateUserRole(user.uid, (event.currentTarget as HTMLSelectElement).value)}>
-                  {#each roles as role}
-                    <option value={role.id} selected={user.roleIds.includes(role.id)}>{role.name}</option>
+          <div class="table-surface">
+            <div class="table-scroll">
+              <table class="lv-table">
+                <thead>
+                  <tr>
+                    <th>User</th>
+                    <th>Role Assignment</th>
+                    <th class="cell-center">2FA Required</th>
+                    <th class="cell-center">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each users as user}
+                    <tr>
+                      <td>
+                        <strong>{user.displayName}</strong>
+                        <small>{user.email ?? user.uid}</small>
+                      </td>
+                      <td>
+                        <select on:change={(event) => updateUserRole(user.uid, (event.currentTarget as HTMLSelectElement).value)}>
+                          {#each roles as role}
+                            <option value={role.id} selected={user.roleIds.includes(role.id)}>{role.name}</option>
+                          {/each}
+                        </select>
+                      </td>
+                      <td class="cell-center">
+                        <StatusBadge status={user.twoFactorRequired ? "synced" : "warning"} label={user.twoFactorRequired ? "Enforced" : "Optional"} />
+                      </td>
+                      <td class="cell-center">
+                        <StatusBadge status={user.disabled ? "offline" : "online"} label={user.disabled ? "Disabled" : "Active"} />
+                      </td>
+                    </tr>
                   {/each}
-                </select>
-              </div>
-            {/each}
+                </tbody>
+              </table>
+            </div>
           </div>
         </Card>
       {/if}
@@ -1438,118 +2639,261 @@
       {#if currentView === "roles"}
         <div class="two-column">
           <Card title="Roles" subtitle="Global permissions">
-            <div class="list">
-              {#each roles as role}
-                <div class="list-row">
-                  <div>
-                    <strong>{role.name}</strong>
-                    <small>{role.permissions.join(", ") || "No permissions"}</small>
-                  </div>
-                  <span class="status-pill">{role.id}</span>
-                </div>
-              {/each}
+            <div class="table-surface">
+              <div class="table-scroll">
+                <table class="lv-table">
+                  <thead>
+                    <tr>
+                      <th>Role</th>
+                      <th>ID</th>
+                      <th class="cell-numeric">Permissions</th>
+                      <th class="cell-center">Type</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each roles as role}
+                      <tr>
+                        <td>
+                          <strong>{role.name}</strong>
+                          <small>{role.permissions.join(", ") || "No permissions"}</small>
+                        </td>
+                        <td class="cell-mono">{role.id}</td>
+                        <td class="cell-numeric">{role.permissions.length}</td>
+                        <td class="cell-center">
+                          <StatusBadge status={role.builtin ? "maintenance" : "online"} label={role.builtin ? "Built-in" : "Custom"} />
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </Card>
-          <Card title="Create Role" subtitle="Permission bundles for staff or automation">
-            <label>ID<input bind:value={createRoleForm.id} /></label>
-            <label>Name<input bind:value={createRoleForm.name} /></label>
-            <label>Permissions<input bind:value={createRoleForm.permissions} /></label>
-            <button on:click={createRole}>Create Role</button>
-          </Card>
+          <div id="create-role-surface" tabindex="-1">
+            <Card title="Create Role" subtitle="Permission bundles for staff or automation">
+              <div class="form-grid">
+                <label>ID<input bind:value={createRoleForm.id} /></label>
+                <label>Name<input bind:value={createRoleForm.name} /></label>
+                <label>Permissions<input bind:value={createRoleForm.permissions} /></label>
+              </div>
+              <ActionButton on:click={createRole}>Create Role</ActionButton>
+              <Card tone="danger" compact title="Privilege Warning" subtitle="Administrative permissions affect the entire control plane.">
+                <p class="muted">Grant high-impact permissions only to trusted operators and automation clients.</p>
+              </Card>
+            </Card>
+          </div>
         </div>
       {/if}
 
       {#if currentView === "backups"}
-        <Card title="Backups" subtitle="Current selected server backups">
-          <div class="list">
-            {#each serverBackups as backup}
-              <div class="list-row">
-                <div>
-                  <strong>{backup.name}</strong>
-                  <small>{backup.status} • {backup.sizeBytes} bytes</small>
-                </div>
-                <div class="button-row">
-                  <button class="ghost" on:click={() => downloadBackup(backup.id)}>Download</button>
-                  <button class="ghost" on:click={() => restoreBackup(backup.id)}>Restore</button>
-                  <button class="ghost danger" on:click={() => deleteBackup(backup.id)}>Delete</button>
-                </div>
+        <Card title="Backups" subtitle="Current selected server backups with provider and lifecycle controls">
+          {#if serverBackups.length}
+            <div class="table-surface">
+              <div class="table-scroll">
+                <table class="lv-table">
+                  <thead>
+                    <tr>
+                      <th>Backup</th>
+                      <th>Provider</th>
+                      <th>Status</th>
+                      <th class="cell-numeric">Size</th>
+                      <th class="cell-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each serverBackups as backup}
+                      <tr>
+                        <td>
+                          <strong>{backup.name}</strong>
+                          <small>{backup.createdAt}</small>
+                        </td>
+                        <td>{backup.provider.toUpperCase()}</td>
+                        <td><StatusBadge status={backup.status} /></td>
+                        <td class="cell-numeric">{formatBytes(backup.sizeBytes)}</td>
+                        <td class="cell-right">
+                          <div class="button-row">
+                            <ActionButton variant="ghost" on:click={() => downloadBackup(backup.id)}>Download</ActionButton>
+                            <ActionButton variant="secondary" on:click={() => restoreBackup(backup.id)}>Restore</ActionButton>
+                            <ActionButton variant="danger" on:click={() => deleteBackup(backup.id)}>Delete</ActionButton>
+                          </div>
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
               </div>
-            {/each}
-          </div>
+            </div>
+          {:else}
+            <EmptyState title="No backups for current server" description="Create a backup from the server detail page and it will appear in this admin overview list." />
+          {/if}
         </Card>
       {/if}
 
       {#if currentView === "scheduled-tasks"}
-        <Card title="Scheduled Tasks" subtitle="Tasks for the currently selected server">
-          <div class="list">
-            {#each serverTasks as task}
-              <div class="list-row">
-                <div>
-                  <strong>{task.name}</strong>
-                  <small>{task.cron} • {task.action.type}</small>
-                </div>
-                <button class="ghost" on:click={() => runTask(task.id)}>Run Now</button>
+        <Card title="Scheduled Tasks" subtitle="Cron-driven runtime operations for the selected server">
+          {#if serverTasks.length}
+            <div class="table-surface">
+              <div class="table-scroll">
+                <table class="lv-table">
+                  <thead>
+                    <tr>
+                      <th>Task</th>
+                      <th>CRON</th>
+                      <th>Action</th>
+                      <th>Status</th>
+                      <th class="cell-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each serverTasks as task}
+                      <tr>
+                        <td>
+                          <strong>{task.name}</strong>
+                          <small>Last run: {task.lastRunAt ?? "never"}</small>
+                        </td>
+                        <td class="cell-mono">{task.cron}</td>
+                        <td>{task.action.type}</td>
+                        <td><StatusBadge status={task.enabled ? "online" : "offline"} label={task.enabled ? "Enabled" : "Disabled"} /></td>
+                        <td class="cell-right"><ActionButton variant="ghost" on:click={() => runTask(task.id)}>Run Now</ActionButton></td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
               </div>
-            {/each}
-          </div>
+            </div>
+          {:else}
+            <EmptyState title="No scheduled tasks found" description="Create tasks from the server Schedules tab to automate power actions, commands, and backups." />
+          {/if}
         </Card>
       {/if}
 
       {#if currentView === "audit-logs"}
         <Card title="Audit Logs" subtitle="Sensitive actions with secret-safe metadata">
-          <div class="list">
-            {#each auditLogs as log}
-              <div class="list-row">
-                <div>
-                  <strong>{log.action}</strong>
-                  <small>{log.actorId} • {log.targetType}:{log.targetId}</small>
-                </div>
-                <span class="status-pill">{log.createdAt}</span>
-              </div>
-            {/each}
+          <div class="table-surface">
+            <div class="table-scroll">
+              <table class="lv-table">
+                <thead>
+                  <tr>
+                    <th>Action</th>
+                    <th>Actor</th>
+                    <th>Target</th>
+                    <th class="cell-center">Type</th>
+                    <th class="cell-right">Timestamp</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each auditLogs as log}
+                    <tr>
+                      <td><strong>{log.action}</strong></td>
+                      <td class="cell-mono">{log.actorId}</td>
+                      <td class="cell-mono">{log.targetType}:{log.targetId}</td>
+                      <td class="cell-center"><StatusBadge status="synced" label={log.actorType} /></td>
+                      <td class="cell-right">{log.createdAt}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
           </div>
         </Card>
       {/if}
 
       {#if currentView === "alerts"}
         <Card title="Alerts" subtitle="Open, acknowledged, and resolved runtime events">
-          <div class="list">
-            {#each alertEvents as alert}
-              <div class="list-row">
-                <div>
-                  <strong>{alert.title}</strong>
-                  <small>{alert.message}</small>
-                </div>
-                <div class="button-row">
-                  <span class="status-pill">{alert.status}</span>
-                  {#if alert.status === "open"}
-                    <button class="ghost" on:click={() => acknowledgeAlert(alert.id)}>Acknowledge</button>
-                  {/if}
-                </div>
+          {#if alertEvents.length}
+            <div class="table-surface">
+              <div class="table-scroll">
+                <table class="lv-table">
+                  <thead>
+                    <tr>
+                      <th>Alert</th>
+                      <th>Scope</th>
+                      <th>Severity</th>
+                      <th>Status</th>
+                      <th class="cell-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each alertEvents as alert}
+                      <tr>
+                        <td>
+                          <strong>{alert.title}</strong>
+                          <small>{alert.message}</small>
+                        </td>
+                        <td>{alert.scopeType}</td>
+                        <td><StatusBadge status={alert.severity === "critical" ? "failed" : alert.severity === "warning" ? "warning" : "online"} label={alert.severity} /></td>
+                        <td><StatusBadge status={alert.status} /></td>
+                        <td class="cell-right">
+                          {#if alert.status === "open"}
+                            <ActionButton variant="secondary" on:click={() => acknowledgeAlert(alert.id)}>Acknowledge</ActionButton>
+                          {/if}
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
               </div>
-            {/each}
-          </div>
+            </div>
+          {:else}
+            <EmptyState title="No active alerts" description="Leviathan will surface crash events, node outages, and threshold triggers here." />
+          {/if}
         </Card>
       {/if}
 
       {#if currentView === "api-keys"}
-        <Card title="API Keys" subtitle="Scoped automation credentials; raw keys are shown once">
-          <label>API Key Name<input bind:value={apiKeyName} /></label>
-          <button on:click={createApiKey}>Create API Key</button>
-          {#if generatedApiKey}
-            <p class="token-box">{generatedApiKey}</p>
-          {/if}
+        <div class="two-column">
+          <div id="create-api-key-surface" tabindex="-1">
+            <Card title="Create API Key" subtitle="Scoped automation credentials; raw secret is shown once">
+              <label>API Key Name<input bind:value={apiKeyName} /></label>
+              <div class="button-row">
+                <ActionButton on:click={createApiKey}>Create API Key</ActionButton>
+              </div>
+              {#if generatedApiKey}
+                <p class="muted">The latest API key was opened in the one-time secret modal and is now hidden from the page.</p>
+              {/if}
+            </Card>
+          </div>
+          <Card tone="danger" title="One-time Secret Warning" subtitle="Generated API key secrets cannot be shown again.">
+            <p class="muted">Store the generated key immediately. Existing records only keep the key prefix and hash for security.</p>
+          </Card>
+        </div>
+        <Card title="API Key Inventory" subtitle="Prefixes, scopes, expiry posture, and revoke state">
           {#if apiKeys.length}
-            <div class="list">
-              {#each apiKeys as key}
-                <div class="list-row">
-                  <div>
-                    <strong>{key.name}</strong>
-                    <small>{key.keyPrefix} • {key.scopes.join(", ")}</small>
-                  </div>
-                  <span class="status-pill">{key.revoked ? "Revoked" : "Active"}</span>
-                </div>
-              {/each}
+            <div class="table-surface">
+              <div class="table-scroll">
+                <table class="lv-table">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Prefix</th>
+                      <th>Scopes</th>
+                      <th>Last Used</th>
+                      <th>Status</th>
+                      <th class="cell-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each apiKeys as key}
+                      <tr>
+                        <td><strong>{key.name}</strong></td>
+                        <td class="cell-mono">{key.keyPrefix}</td>
+                        <td><small>{key.scopes.join(", ") || "No scopes"}</small></td>
+                        <td>{key.lastUsedAt ?? "never"}</td>
+                        <td><StatusBadge status={key.revoked ? "revoked" : "online"} label={key.revoked ? "Revoked" : "Active"} /></td>
+                        <td class="cell-right">
+                          <ActionButton
+                            variant="danger"
+                            disabled={key.revoked}
+                            on:click={() => revokeApiKey(key.id, key.name)}
+                          >
+                            Revoke
+                          </ActionButton>
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
             </div>
           {:else}
             <EmptyState title="No API keys created" description="Create a scoped automation key when you need external provisioning, scripts, or integration access." />
@@ -1560,34 +2904,70 @@
       {#if currentView === "webhooks"}
         <div class="two-column">
           <Card title="Webhooks" subtitle="Signed generic and Discord deliveries">
-            <label>Webhook Name<input bind:value={createWebhookForm.name} /></label>
-            <label>Webhook URL<input bind:value={createWebhookForm.url} /></label>
-            <label>Events<input bind:value={createWebhookForm.events} /></label>
-            <button on:click={createWebhook}>Create Webhook</button>
-            <div class="list">
-              {#each webhooks as webhook}
-                <div class="list-row">
-                  <div>
-                    <strong>{webhook.name}</strong>
-                    <small>{webhook.events.join(", ")}</small>
-                  </div>
-                  <span class="status-pill">{webhook.type}</span>
-                </div>
-              {/each}
+            <div class="form-grid">
+              <label>Webhook Name<input bind:value={createWebhookForm.name} /></label>
+              <label>Webhook URL<input bind:value={createWebhookForm.url} /></label>
+              <label>Events<input bind:value={createWebhookForm.events} /></label>
             </div>
+            <ActionButton on:click={createWebhook}>Create Webhook</ActionButton>
+            {#if webhooks.length}
+              <div class="table-surface">
+                <div class="table-scroll">
+                  <table class="lv-table">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Type</th>
+                        <th>Events</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each webhooks as webhook}
+                        <tr>
+                          <td><strong>{webhook.name}</strong></td>
+                          <td>{webhook.type}</td>
+                          <td><small>{webhook.events.join(", ")}</small></td>
+                          <td><StatusBadge status={webhook.enabled ? "online" : "offline"} label={webhook.enabled ? "Enabled" : "Disabled"} /></td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            {:else}
+              <EmptyState title="No webhook endpoints" description="Create a webhook endpoint to receive provisioning and runtime events." />
+            {/if}
           </Card>
           <Card title="Deliveries" subtitle="Persistent webhook delivery records">
-            <div class="list">
-              {#each webhookDeliveries as delivery}
-                <div class="list-row">
-                  <div>
-                    <strong>{delivery.event}</strong>
-                    <small>{delivery.responseStatus ?? "pending"} • attempts {delivery.attempts}</small>
-                  </div>
-                  <span class="status-pill">{delivery.status}</span>
+            {#if webhookDeliveries.length}
+              <div class="table-surface">
+                <div class="table-scroll">
+                  <table class="lv-table">
+                    <thead>
+                      <tr>
+                        <th>Event</th>
+                        <th>Status</th>
+                        <th class="cell-numeric">Attempts</th>
+                        <th class="cell-right">HTTP</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each webhookDeliveries as delivery}
+                        <tr>
+                          <td><strong>{delivery.event}</strong></td>
+                          <td><StatusBadge status={delivery.status === "delivered" ? "applied" : delivery.status === "failed" ? "failed" : "starting"} label={delivery.status} /></td>
+                          <td class="cell-numeric">{delivery.attempts}</td>
+                          <td class="cell-right">{delivery.responseStatus ?? "pending"}</td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                  </table>
                 </div>
-              {/each}
-            </div>
+              </div>
+            {:else}
+              <EmptyState title="No deliveries recorded" description="Webhook delivery attempts and retry state will appear here." />
+            {/if}
           </Card>
         </div>
       {/if}
@@ -1595,27 +2975,46 @@
       {#if currentView === "backup-targets"}
         <div class="two-column">
           <Card title="S3 Backup Target" subtitle="S3-compatible endpoint configuration">
-            <label>Name<input bind:value={backupTargetForm.name} /></label>
-            <label>Endpoint<input bind:value={backupTargetForm.endpoint} /></label>
-            <label>Region<input bind:value={backupTargetForm.region} /></label>
-            <label>Bucket<input bind:value={backupTargetForm.bucket} /></label>
-            <label>Access Key ID<input bind:value={backupTargetForm.accessKeyId} /></label>
-            <label>Secret Access Key<input type="password" bind:value={backupTargetForm.secretAccessKey} /></label>
-            <label>Path Prefix<input bind:value={backupTargetForm.pathPrefix} /></label>
-            <button on:click={createBackupTarget}>Create Target</button>
+            <div class="form-grid">
+              <label>Name<input bind:value={backupTargetForm.name} /></label>
+              <label>Endpoint<input bind:value={backupTargetForm.endpoint} /></label>
+              <label>Region<input bind:value={backupTargetForm.region} /></label>
+              <label>Bucket<input bind:value={backupTargetForm.bucket} /></label>
+              <label>Access Key ID<input bind:value={backupTargetForm.accessKeyId} /></label>
+              <label>Secret Access Key<input type="password" bind:value={backupTargetForm.secretAccessKey} /></label>
+              <label>Path Prefix<input bind:value={backupTargetForm.pathPrefix} /></label>
+            </div>
+            <ActionButton on:click={createBackupTarget}>Create Target</ActionButton>
           </Card>
           <Card title="Targets" subtitle="Secrets are never returned to the browser">
-            <div class="list">
-              {#each backupTargets as target}
-                <div class="list-row">
-                  <div>
-                    <strong>{target.name}</strong>
-                    <small>{target.provider} • {target.s3?.bucket ?? target.local?.basePath}</small>
-                  </div>
-                  <span class="status-pill">{target.enabled ? "Enabled" : "Disabled"}</span>
+            {#if backupTargets.length}
+              <div class="table-surface">
+                <div class="table-scroll">
+                  <table class="lv-table">
+                    <thead>
+                      <tr>
+                        <th>Target</th>
+                        <th>Provider</th>
+                        <th>Location</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each backupTargets as target}
+                        <tr>
+                          <td><strong>{target.name}</strong></td>
+                          <td>{target.provider.toUpperCase()}</td>
+                          <td class="cell-mono">{target.s3?.bucket ?? target.local?.basePath}</td>
+                          <td><StatusBadge status={target.enabled ? "online" : "offline"} label={target.enabled ? "Enabled" : "Disabled"} /></td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                  </table>
                 </div>
-              {/each}
-            </div>
+              </div>
+            {:else}
+              <EmptyState title="No backup targets configured" description="Configure local or S3-compatible destinations for backup retention and restore flows." />
+            {/if}
           </Card>
         </div>
       {/if}
@@ -1623,28 +3022,47 @@
       {#if currentView === "cloudflare"}
         <div class="two-column">
           <Card title="Cloudflare Route" subtitle="Create tunnel hostname routes and dry-run API changes">
-            <label>Hostname<input bind:value={cloudflareRouteForm.hostname} /></label>
-            <label>Service<input bind:value={cloudflareRouteForm.service} /></label>
-            <label>Tunnel ID<input bind:value={cloudflareRouteForm.tunnelId} /></label>
-            <label>Zone ID<input bind:value={cloudflareRouteForm.zoneId} /></label>
-            <button on:click={createCloudflareRoute}>Create Route</button>
+            <div class="form-grid">
+              <label>Hostname<input bind:value={cloudflareRouteForm.hostname} /></label>
+              <label>Service<input bind:value={cloudflareRouteForm.service} /></label>
+              <label>Tunnel ID<input bind:value={cloudflareRouteForm.tunnelId} /></label>
+              <label>Zone ID<input bind:value={cloudflareRouteForm.zoneId} /></label>
+            </div>
+            <ActionButton on:click={createCloudflareRoute}>Create Route</ActionButton>
           </Card>
           <Card title="Routes" subtitle="Dry-run before applying Cloudflare changes">
             {#if cloudflareRoutes.length}
-              <div class="list">
-                {#each cloudflareRoutes as route}
-                  <div class="list-row">
-                    <div>
-                      <strong>{route.hostname}</strong>
-                      <small>{route.service}</small>
-                    </div>
-                    <div class="button-row">
-                      <button class="ghost" on:click={() => dryRunCloudflareRoute(route.id)}>Dry Run</button>
-                      <button class="ghost" on:click={() => syncCloudflareRoute(route.id)}>Apply</button>
-                      <button class="ghost danger" on:click={() => deleteCloudflareRoute(route.id)}>Delete</button>
-                    </div>
-                  </div>
-                {/each}
+              <div class="table-surface">
+                <div class="table-scroll">
+                  <table class="lv-table">
+                    <thead>
+                      <tr>
+                        <th>Hostname</th>
+                        <th>Service</th>
+                        <th>Tunnel</th>
+                        <th>Status</th>
+                        <th class="cell-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each cloudflareRoutes as route}
+                        <tr>
+                          <td class="cell-mono">{route.hostname}</td>
+                          <td class="cell-mono">{route.service}</td>
+                          <td class="cell-mono">{route.tunnelId}</td>
+                          <td><StatusBadge status={route.enabled ? "synced" : "out-of-sync"} label={route.enabled ? "Enabled" : "Disabled"} /></td>
+                          <td class="cell-right">
+                            <div class="button-row">
+                              <ActionButton variant="ghost" on:click={() => dryRunCloudflareRoute(route.id)}>Dry Run</ActionButton>
+                              <ActionButton variant="secondary" on:click={() => syncCloudflareRoute(route.id)}>Apply</ActionButton>
+                              <ActionButton variant="danger" on:click={() => deleteCloudflareRoute(route.id)}>Delete</ActionButton>
+                            </div>
+                          </td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             {:else}
               <EmptyState title="No Cloudflare routes configured" description="Create a hostname route, review the dry-run output, and then apply it when the zone and tunnel settings are ready." />
@@ -1654,24 +3072,66 @@
       {/if}
 
       {#if currentView === "firewall"}
-        <Card title="Firewall" subtitle="Per-server rules are managed from each server Network page">
-          <p class="muted">Daemon-side UFW rule generation is available with dry-run output and explicit audit logging before enforcement.</p>
-        </Card>
+        <div class="two-column">
+          <Card title="Firewall Policy" subtitle="Per-server rules are managed from each server Network page">
+            <div class="list">
+              <div class="list-row">
+                <div>
+                  <strong>Provider Status</strong>
+                  <small>UFW and nftables provider abstractions are available on daemon nodes.</small>
+                </div>
+                <StatusBadge status="maintenance" label="Best Effort" />
+              </div>
+              <div class="list-row">
+                <div>
+                  <strong>Dry-run First</strong>
+                  <small>Generate and review command plans before enforcing any rule changes.</small>
+                </div>
+                <StatusBadge status="dry-run" />
+              </div>
+            </div>
+          </Card>
+          <Card tone="danger" title="Danger Zone" subtitle="Firewall changes can break connectivity if applied incorrectly.">
+            <p class="muted">Apply policies from the server Network surface with audited actions and controlled dry-run output.</p>
+            <ActionButton variant="secondary" on:click={() => navigateToView("servers")}>Open Server Network Controls</ActionButton>
+          </Card>
+        </div>
       {/if}
 
       {#if currentView === "jobs"}
+        <div class="stats-grid">
+          <StatCard label="Pending" value={jobs.filter((job) => job.status === "pending").length} detail="Awaiting worker lock" />
+          <StatCard label="Running" value={jobs.filter((job) => job.status === "running").length} detail="In-flight operations" tone="primary" />
+          <StatCard label="Failed" value={jobs.filter((job) => job.status === "failed").length} detail="Retry candidates" tone="danger" />
+          <StatCard label="Success" value={jobs.filter((job) => job.status === "success").length} detail="Completed jobs" tone="success" />
+        </div>
         <Card title="Job Queue" subtitle="Scheduled task and background worker visibility">
           {#if jobs.length}
-            <div class="list">
-              {#each jobs as job}
-                <div class="list-row">
-                  <div>
-                    <strong>{job.type}</strong>
-                    <small>{job.id} • attempts {job.attempts}/{job.maxAttempts}</small>
-                  </div>
-                  <span class="status-pill">{job.status}</span>
-                </div>
-              {/each}
+            <div class="table-surface">
+              <div class="table-scroll">
+                <table class="lv-table">
+                  <thead>
+                    <tr>
+                      <th>Type</th>
+                      <th>Job ID</th>
+                      <th>Status</th>
+                      <th class="cell-numeric">Attempts</th>
+                      <th class="cell-right">Last Error</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each jobs as job}
+                      <tr>
+                        <td><strong>{job.type}</strong></td>
+                        <td class="cell-mono">{job.id}</td>
+                        <td><StatusBadge status={job.status} /></td>
+                        <td class="cell-numeric">{job.attempts}/{job.maxAttempts}</td>
+                        <td class="cell-right">{job.errorMessage ?? "none"}</td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
             </div>
           {:else}
             <EmptyState title="No background jobs recorded" description="Queued task executions, retries, and worker activity will show up here as the control plane starts processing jobs." />
@@ -1681,74 +3141,151 @@
 
       {#if currentView === "plugins"}
         <Card title="Plugins" subtitle="Trusted admin-installed extension manifests">
-          <div class="list">
-            {#each plugins as plugin}
-              <div class="list-row">
-                <div>
-                  <strong>{plugin.name}</strong>
-                  <small>{plugin.id} • {plugin.version}</small>
-                </div>
-                <span class="status-pill">{plugin.enabled ? "Enabled" : "Disabled"}</span>
+          {#if plugins.length}
+            <div class="table-surface">
+              <div class="table-scroll">
+                <table class="lv-table">
+                  <thead>
+                    <tr>
+                      <th>Plugin</th>
+                      <th>ID</th>
+                      <th>Version</th>
+                      <th>Trust</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each plugins as plugin}
+                      <tr>
+                        <td><strong>{plugin.name}</strong></td>
+                        <td class="cell-mono">{plugin.id}</td>
+                        <td>{plugin.version}</td>
+                        <td><StatusBadge status={plugin.trusted ? "synced" : "warning"} label={plugin.trusted ? "Trusted" : "Untrusted"} /></td>
+                        <td><StatusBadge status={plugin.enabled ? "online" : "offline"} label={plugin.enabled ? "Enabled" : "Disabled"} /></td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
               </div>
-            {/each}
-          </div>
+            </div>
+          {:else}
+            <EmptyState title="No plugins installed" description="Trusted plugin manifests will appear here after registration and load." />
+          {/if}
         </Card>
       {/if}
 
       {#if currentView === "billing"}
-        <Card title="Billing Integrations" subtitle="Stripe and WHMCS webhook interfaces">
-          <p class="muted">Configure STRIPE_WEBHOOK_SECRET or WHMCS_WEBHOOK_SECRET on the API. Billing events map to provision, suspend, unsuspend, terminate, and update-limits hooks.</p>
-        </Card>
+        <div class="two-column">
+          <Card title="Billing Integrations" subtitle="Stripe and WHMCS webhook interfaces">
+            <div class="list">
+              <div class="list-row">
+                <div>
+                  <strong>Stripe</strong>
+                  <small>Provision, suspend, unsuspend, terminate, and limits update mappings.</small>
+                </div>
+                <StatusBadge status="warning" label="Configure Secret" />
+              </div>
+              <div class="list-row">
+                <div>
+                  <strong>WHMCS</strong>
+                  <small>Shared-secret validation and modular action mapping handlers.</small>
+                </div>
+                <StatusBadge status="warning" label="Configure Secret" />
+              </div>
+            </div>
+          </Card>
+          <Card title="Webhook Guidance" subtitle="Secrets must stay server-side only">
+            <p class="muted">Configure <code>STRIPE_WEBHOOK_SECRET</code> or <code>WHMCS_WEBHOOK_SECRET</code> on the API service. Leviathan never exposes these values in the panel UI.</p>
+          </Card>
+        </div>
       {/if}
 
       {#if currentView === "settings"}
         <div class="two-column">
           <Card title="Settings" subtitle="Retention and alert controls">
             {#if settings}
-              <label>App Name<input bind:value={settings.appName} /></label>
-              <label>Backup Retention<input type="number" bind:value={settings.backup.retentionCount} /></label>
-              <label>Metrics Retention Hours<input type="number" bind:value={settings.metrics.retentionHours} /></label>
-              <label>Node Offline Minutes<input type="number" bind:value={settings.alerts.nodeOfflineMinutes} /></label>
-              <label>Cloudflare Account ID<input bind:value={settings.cloudflare.accountId} /></label>
-              <label>Cloudflare Zone ID<input bind:value={settings.cloudflare.zoneId} /></label>
-              <label>Cloudflare Tunnel ID<input bind:value={settings.cloudflare.tunnelId} /></label>
-              <label>Cloudflare API Token<input type="password" bind:value={settings.cloudflare.apiToken} /></label>
-              <button on:click={saveSettings}>Save Settings</button>
+              <div class="form-grid">
+                <label>App Name<input bind:value={settings.appName} /></label>
+                <label>Backup Retention<input type="number" bind:value={settings.backup.retentionCount} /></label>
+                <label>Metrics Retention Hours<input type="number" bind:value={settings.metrics.retentionHours} /></label>
+                <label>Node Offline Minutes<input type="number" bind:value={settings.alerts.nodeOfflineMinutes} /></label>
+                <label>Cloudflare Account ID<input bind:value={settings.cloudflare.accountId} /></label>
+                <label>Cloudflare Zone ID<input bind:value={settings.cloudflare.zoneId} /></label>
+                <label>Cloudflare Tunnel ID<input bind:value={settings.cloudflare.tunnelId} /></label>
+                <label>Cloudflare API Token<input type="password" bind:value={settings.cloudflare.apiToken} /></label>
+              </div>
+              <ActionButton on:click={saveSettings}>Save Settings</ActionButton>
             {/if}
           </Card>
           <Card title="Integrations" subtitle="API keys and webhooks">
             <label>API Key Name<input bind:value={apiKeyName} /></label>
-            <button on:click={createApiKey}>Create API Key</button>
+            <ActionButton on:click={createApiKey}>Create API Key</ActionButton>
             {#if generatedApiKey}
-              <p class="token-box">{generatedApiKey}</p>
+              <p class="muted">The latest API key was revealed in a modal and is now hidden from this settings surface.</p>
             {/if}
             <label>Webhook Name<input bind:value={createWebhookForm.name} /></label>
             <label>Webhook URL<input bind:value={createWebhookForm.url} /></label>
             <label>Events<input bind:value={createWebhookForm.events} /></label>
-            <button class="ghost" on:click={createWebhook}>Create Webhook</button>
-            <div class="list">
-              {#each apiKeys as key}
-                <div class="list-row">
-                  <div>
-                    <strong>{key.name}</strong>
-                    <small>{key.keyPrefix} • {key.scopes.join(", ")}</small>
-                  </div>
-                  <span class="status-pill">{key.revoked ? "Revoked" : "Active"}</span>
-                </div>
-              {/each}
-              {#each webhooks as webhook}
-                <div class="list-row">
-                  <div>
-                    <strong>{webhook.name}</strong>
-                    <small>{webhook.events.join(", ")}</small>
-                  </div>
-                  <span class="status-pill">{webhook.type}</span>
-                </div>
-              {/each}
+            <ActionButton variant="secondary" on:click={createWebhook}>Create Webhook</ActionButton>
+            <div class="table-surface">
+              <div class="table-scroll">
+                <table class="lv-table">
+                  <thead>
+                    <tr>
+                      <th>Integration Item</th>
+                      <th>Type</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each apiKeys as key}
+                      <tr>
+                        <td>
+                          <strong>{key.name}</strong>
+                          <small>{key.keyPrefix}</small>
+                        </td>
+                        <td>API Key</td>
+                        <td><StatusBadge status={key.revoked ? "revoked" : "online"} label={key.revoked ? "Revoked" : "Active"} /></td>
+                      </tr>
+                    {/each}
+                    {#each webhooks as webhook}
+                      <tr>
+                        <td>
+                          <strong>{webhook.name}</strong>
+                          <small>{webhook.events.join(", ")}</small>
+                        </td>
+                        <td>Webhook ({webhook.type})</td>
+                        <td><StatusBadge status={webhook.enabled ? "online" : "offline"} label={webhook.enabled ? "Enabled" : "Disabled"} /></td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </Card>
         </div>
       {/if}
     </section>
-  </main>
+  </AppShell>
+
+  <ConfirmDialog
+    open={confirmState.open}
+    title={confirmState.title}
+    description={confirmState.description}
+    confirmLabel={confirmState.confirmLabel}
+    danger={confirmState.danger}
+    loading={busyAction === confirmState.confirmLabel}
+    on:cancel={closeConfirm}
+    on:confirm={() => void executeConfirm()}
+  />
+
+  <SecretRevealModal
+    open={secretReveal.open}
+    title={secretReveal.title}
+    subtitle={secretReveal.subtitle}
+    secret={secretReveal.secret}
+    warning={secretReveal.warning}
+    hint={secretReveal.hint}
+    on:close={closeSecretReveal}
+  />
 {/if}

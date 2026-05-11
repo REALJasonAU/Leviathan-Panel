@@ -35,6 +35,7 @@ This repository is organized as a monorepo:
 - Template-based provisioning with environment variable metadata and `.env.example` import
 - Multi-node architecture with token rotation and audit logging hooks
 - Installer scripts for Ubuntu/Debian panel and daemon deployments, with best-effort paths for Fedora, Rocky Linux, AlmaLinux, CentOS Stream, and Arch Linux
+- Leviathan Command Deck panel redesign with a unified admin/user shell, premium abyss palette, safer destructive workflows, and reusable Svelte UI primitives
 
 ## Quick Start
 
@@ -51,6 +52,8 @@ cp apps/api/.env.example apps/api/.env
 cp apps/panel/.env.example apps/panel/.env
 cp apps/daemon/.env.example apps/daemon/.env
 ```
+
+The API now accepts both `localhost` and `127.0.0.1` panel origins for local development. If you use a custom dev host, add it to `PANEL_EXTRA_ORIGINS` in `apps/api/.env`.
 
 3. Start the workspace:
 

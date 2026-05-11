@@ -9,6 +9,8 @@ Set:
 - `apps/api/.env`
   - `MOCK_AUTH=true`
   - `MOCK_DATA=true`
+  - `PANEL_ORIGIN=http://localhost:5173`
+  - `PANEL_EXTRA_ORIGINS=http://127.0.0.1:4173`
 - `apps/panel/.env`
   - `VITE_USE_MOCK_AUTH=true`
 
@@ -23,6 +25,8 @@ Use the mock sign-in buttons in the panel:
 
 - `Use Mock Admin`
 - `Use Mock User`
+
+Leviathan accepts both `http://localhost:*` and `http://127.0.0.1:*` during local development so the panel can be opened from either address without tripping API CORS.
 
 ## What works in mock mode
 

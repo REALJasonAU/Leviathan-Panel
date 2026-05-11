@@ -22,6 +22,11 @@ import { registerServerRoutes } from "./routes/servers.js";
 import { registerDaemonRoutes } from "./routes/daemon.js";
 
 export const buildApp = async () => {
+  const allowedOrigins = new Set([
+    config.PANEL_ORIGIN,
+    ...config.PANEL_EXTRA_ORIGINS,
+  ]);
+
   const app = Fastify({
     logger: {
       level: "info",
@@ -29,7 +34,25 @@ export const buildApp = async () => {
   });
 
   await app.register(cors, {
-    origin: config.PANEL_ORIGIN,
+    origin: (origin, callback) => {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+
+      if (
+        allowedOrigins.has(origin) ||
+        /^http:\/\/(localhost|127\.0\.0\.1):\d+$/i.test(origin)
+      ) {
+        callback(null, true);
+        return;
+      }
+
+      callback(
+        new Error(`Origin ${origin} is not allowed by Leviathan API CORS`),
+        false,
+      );
+    },
     credentials: true,
   });
   await app.register(sensible);

@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Leviathan Admin Directions</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #05070d;
+        --sidebar: #0b1020;
+        --surface: #111827;
+        --surface-elevated: #151e2e;
+        --console: #020617;
+        --border: #1e293b;
+        --soft-border: #334155;
+        --cyan: #00d4ff;
+        --cyan-hover: #38e8ff;
+        --purple: #7c3aed;
+        --purple-soft: #a78bfa;
+        --success: #22c55e;
+        --warning: #f59e0b;
+        --danger: #ef4444;
+        --text: #f8fafc;
+        --text-secondary: #94a3b8;
+        --text-muted: #64748b;
+        --shadow: 0 24px 64px rgba(0, 0, 0, 0.32);
+        --glow: 0 0 0 1px rgba(0, 212, 255, 0.12), 0 20px 48px rgba(0, 212, 255, 0.06);
+        font-family:
+          Inter, Geist, "SF Pro Display", "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(0, 212, 255, 0.12), transparent 24%),
+          radial-gradient(circle at top right, rgba(124, 58, 237, 0.12), transparent 26%),
+          linear-gradient(180deg, #05070d 0%, #060a12 100%);
+      }
+
+      .page {
+        max-width: 1560px;
+        margin: 0 auto;
+        padding: 32px;
+      }
+
+      .intro {
+        margin-bottom: 24px;
+      }
+
+      .eyebrow {
+        margin: 0 0 10px;
+        color: var(--cyan);
+        font-size: 12px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        font-weight: 700;
+      }
+
+      h1 {
+        margin: 0 0 12px;
+        font-size: 40px;
+        line-height: 1;
+        letter-spacing: -0.05em;
+      }
+
+      .subtitle {
+        margin: 0;
+        max-width: 880px;
+        color: var(--text-secondary);
+        font-size: 15px;
+        line-height: 1.7;
+      }
+
+      .directions {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 22px;
+      }
+
+      .direction {
+        border: 1px solid var(--border);
+        border-radius: 22px;
+        background: linear-gradient(180deg, rgba(21, 30, 46, 0.94), rgba(11, 16, 32, 0.96));
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .direction.recommended {
+        border-color: rgba(0, 212, 255, 0.34);
+        box-shadow: var(--shadow), var(--glow);
+      }
+
+      .direction-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 18px 20px 14px;
+        border-bottom: 1px solid rgba(51, 65, 85, 0.76);
+      }
+
+      .direction-header h2 {
+        margin: 0;
+        font-size: 17px;
+        letter-spacing: -0.03em;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .badge.recommended {
+        background: rgba(0, 212, 255, 0.12);
+        color: var(--cyan-hover);
+        border: 1px solid rgba(0, 212, 255, 0.22);
+      }
+
+      .badge.alt {
+        background: rgba(124, 58, 237, 0.14);
+        color: var(--purple-soft);
+        border: 1px solid rgba(124, 58, 237, 0.2);
+      }
+
+      .direction-copy {
+        padding: 16px 20px 0;
+        color: var(--text-secondary);
+        font-size: 14px;
+        line-height: 1.7;
+      }
+
+      .mockup {
+        padding: 20px;
+      }
+
+      .app-shell {
+        display: grid;
+        grid-template-columns: 208px 1fr;
+        min-height: 650px;
+        border: 1px solid rgba(51, 65, 85, 0.65);
+        border-radius: 20px;
+        background: rgba(6, 10, 18, 0.82);
+        overflow: hidden;
+      }
+
+      .sidebar {
+        padding: 18px 14px;
+        background: linear-gradient(180deg, rgba(11, 16, 32, 0.98), rgba(9, 14, 27, 0.98));
+        border-right: 1px solid rgba(51, 65, 85, 0.64);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 18px;
+        padding: 0 8px;
+      }
+
+      .brand-mark {
+        position: relative;
+        width: 34px;
+        height: 34px;
+        border-radius: 12px;
+        background:
+          radial-gradient(circle at 70% 30%, rgba(124, 58, 237, 0.72), transparent 24%),
+          linear-gradient(145deg, rgba(0, 212, 255, 0.22), rgba(17, 24, 39, 0.98));
+        border: 1px solid rgba(0, 212, 255, 0.28);
+      }
+
+      .brand-mark::before,
+      .brand-mark::after {
+        content: "";
+        position: absolute;
+        border-radius: 999px;
+        border: 2px solid var(--cyan);
+        border-left-color: transparent;
+        border-bottom-color: transparent;
+        transform: rotate(38deg);
+      }
+
+      .brand-mark::before {
+        inset: 8px 7px 10px 9px;
+      }
+
+      .brand-mark::after {
+        inset: 14px 11px 8px 16px;
+        border-color: var(--purple-soft);
+        border-left-color: transparent;
+        border-bottom-color: transparent;
+      }
+
+      .brand strong {
+        display: block;
+        font-size: 14px;
+        letter-spacing: -0.02em;
+      }
+
+      .brand small {
+        color: var(--text-muted);
+      }
+
+      .nav-section {
+        margin-top: 14px;
+      }
+
+      .nav-label {
+        padding: 0 8px 8px;
+        color: var(--text-muted);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+      }
+
+      .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 4px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        color: var(--text-secondary);
+        font-size: 13px;
+      }
+
+      .nav-item.active {
+        color: var(--text);
+        background:
+          linear-gradient(90deg, rgba(0, 212, 255, 0.14), rgba(124, 58, 237, 0.08)),
+          rgba(21, 30, 46, 0.92);
+        border: 1px solid rgba(0, 212, 255, 0.22);
+        box-shadow: inset 0 0 0 1px rgba(0, 212, 255, 0.06);
+      }
+
+      .nav-item::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 3px;
+        background: rgba(148, 163, 184, 0.42);
+      }
+
+      .nav-item.active::before {
+        background: linear-gradient(180deg, var(--cyan), var(--purple-soft));
+      }
+
+      .sidebar-pill {
+        margin-top: 18px;
+        padding: 12px;
+        border: 1px solid rgba(34, 197, 94, 0.18);
+        border-radius: 14px;
+        color: var(--text-secondary);
+        background: rgba(17, 24, 39, 0.78);
+        font-size: 12px;
+      }
+
+      .sidebar-pill strong {
+        display: block;
+        margin-bottom: 4px;
+        color: var(--text);
+      }
+
+      .main {
+        padding: 18px;
+        background:
+          radial-gradient(circle at top right, rgba(0, 212, 255, 0.06), transparent 20%),
+          linear-gradient(180deg, rgba(17, 24, 39, 0.92), rgba(10, 14, 23, 0.96));
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 18px;
+      }
+
+      .search {
+        flex: 1;
+        min-height: 44px;
+        padding: 0 16px;
+        border-radius: 14px;
+        border: 1px solid rgba(51, 65, 85, 0.7);
+        background: rgba(2, 6, 23, 0.72);
+        color: var(--text-muted);
+        font-size: 13px;
+        display: flex;
+        align-items: center;
+      }
+
+      .topbar-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .chip,
+      .icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 42px;
+        height: 42px;
+        border-radius: 14px;
+        border: 1px solid rgba(51, 65, 85, 0.7);
+        background: rgba(17, 24, 39, 0.76);
+        color: var(--text-secondary);
+        font-size: 12px;
+      }
+
+      .hero {
+        display: grid;
+        gap: 16px;
+        margin-bottom: 16px;
+      }
+
+      .hero-top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 18px;
+      }
+
+      .hero h3 {
+        margin: 0 0 8px;
+        font-size: 28px;
+        letter-spacing: -0.05em;
+      }
+
+      .hero p {
+        margin: 0;
+        color: var(--text-secondary);
+        font-size: 14px;
+        line-height: 1.65;
+      }
+
+      .hero-actions {
+        display: flex;
+        gap: 10px;
+      }
+
+      .hero-btn {
+        padding: 12px 14px;
+        border-radius: 14px;
+        border: 1px solid rgba(0, 212, 255, 0.2);
+        background: linear-gradient(135deg, rgba(0, 212, 255, 0.18), rgba(0, 212, 255, 0.08));
+        color: var(--text);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .hero-btn.secondary {
+        border-color: rgba(51, 65, 85, 0.84);
+        background: rgba(21, 30, 46, 0.82);
+      }
+
+      .metric-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .metric-card {
+        padding: 16px;
+        border-radius: 18px;
+        border: 1px solid rgba(51, 65, 85, 0.72);
+        background: rgba(21, 30, 46, 0.88);
+      }
+
+      .metric-card .label {
+        color: var(--text-muted);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+      }
+
+      .metric-card strong {
+        display: block;
+        margin-top: 8px;
+        font-size: 24px;
+        letter-spacing: -0.04em;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .metric-card small {
+        display: block;
+        margin-top: 6px;
+        color: var(--text-secondary);
+      }
+
+      .body-grid {
+        display: grid;
+        grid-template-columns: 1.55fr 1fr;
+        gap: 14px;
+      }
+
+      .panel,
+      .table-card {
+        border: 1px solid rgba(51, 65, 85, 0.72);
+        border-radius: 18px;
+        background: rgba(21, 30, 46, 0.9);
+      }
+
+      .panel-header,
+      .table-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 18px;
+        border-bottom: 1px solid rgba(51, 65, 85, 0.6);
+      }
+
+      .panel-header h4,
+      .table-header h4 {
+        margin: 0;
+        font-size: 14px;
+        letter-spacing: -0.02em;
+      }
+
+      .mini-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        padding: 16px 18px 18px;
+      }
+
+      .mini {
+        padding: 14px;
+        border-radius: 14px;
+        background: rgba(2, 6, 23, 0.45);
+        border: 1px solid rgba(51, 65, 85, 0.46);
+      }
+
+      .mini strong {
+        display: block;
+        font-size: 18px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .mini span {
+        color: var(--text-secondary);
+        font-size: 12px;
+      }
+
+      .chart {
+        margin: 0 18px 18px;
+        height: 128px;
+        border-radius: 16px;
+        border: 1px solid rgba(51, 65, 85, 0.5);
+        background:
+          linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(148, 163, 184, 0.04) 1px, transparent 1px),
+          linear-gradient(180deg, rgba(2, 6, 23, 0.95), rgba(8, 12, 22, 0.96));
+        background-size: 100% 32px, 56px 100%, auto;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .chart::before,
+      .chart::after {
+        content: "";
+        position: absolute;
+        inset: auto 0 18px 0;
+        height: 2px;
+        border-radius: 999px;
+      }
+
+      .chart::before {
+        background: linear-gradient(90deg, transparent 0%, rgba(0, 212, 255, 0.2) 10%, rgba(0, 212, 255, 0.95) 50%, rgba(0, 212, 255, 0.15) 100%);
+        transform: translateY(-34px) skewX(-18deg);
+      }
+
+      .chart::after {
+        background: linear-gradient(90deg, transparent 0%, rgba(167, 139, 250, 0.2) 8%, rgba(167, 139, 250, 0.9) 46%, rgba(167, 139, 250, 0.08) 100%);
+        transform: translateY(-58px) skewX(-14deg);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+
+      th,
+      td {
+        padding: 12px 18px;
+        border-bottom: 1px solid rgba(51, 65, 85, 0.34);
+        text-align: left;
+        font-variant-numeric: tabular-nums;
+      }
+
+      th {
+        color: var(--text-muted);
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-size: 10px;
+      }
+
+      td {
+        color: var(--text-secondary);
+      }
+
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 9px;
+        border-radius: 999px;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        font-weight: 700;
+      }
+
+      .status.online {
+        color: #bbf7d0;
+        background: rgba(34, 197, 94, 0.16);
+      }
+
+      .status.warn {
+        color: #fde68a;
+        background: rgba(245, 158, 11, 0.16);
+      }
+
+      .status.danger {
+        color: #fecaca;
+        background: rgba(239, 68, 68, 0.16);
+      }
+
+      .notes {
+        padding: 16px 20px 20px;
+        color: var(--text-secondary);
+        font-size: 13px;
+        line-height: 1.7;
+      }
+
+      ul {
+        margin: 8px 0 0;
+        padding-left: 18px;
+      }
+
+      li + li {
+        margin-top: 6px;
+      }
+
+      .dense .metric-grid {
+        gap: 10px;
+      }
+
+      .dense .metric-card,
+      .dense .panel,
+      .dense .table-card {
+        border-radius: 16px;
+      }
+
+      .dense .mini-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .executive .body-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .executive .metric-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      @media (max-width: 1280px) {
+        .directions {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="intro">
+        <p class="eyebrow">Leviathan Admin Redesign</p>
+        <h1>Visual directions for the admin shell</h1>
+        <p class="subtitle">
+          These are not final pages yet. They are three shell-level directions to
+          choose the overall balance: the amount of density, the hierarchy of
+          operational data, and the tone the rest of the admin pages should
+          follow.
+        </p>
+      </div>
+
+      <div class="directions">
+        <section class="direction recommended">
+          <div class="direction-header">
+            <h2>A. Command Deck</h2>
+            <span class="badge recommended">Recommended</span>
+          </div>
+          <div class="direction-copy">
+            Balanced and structured. Keeps strong operational density, but uses
+            clearer grouping, larger hero framing, and more polished spacing for
+            premium feel.
+          </div>
+          <div class="mockup">
+            <div class="app-shell">
+              <aside class="sidebar">
+                <div class="brand">
+                  <span class="brand-mark"></span>
+                  <div>
+                    <strong>Leviathan</strong>
+                    <small>Control Plane</small>
+                  </div>
+                </div>
+                <div class="nav-section">
+                  <div class="nav-label">Main</div>
+                  <div class="nav-item active">Overview</div>
+                  <div class="nav-item">Servers</div>
+                  <div class="nav-item">Nodes</div>
+                  <div class="nav-item">Templates</div>
+                  <div class="nav-item">Backups</div>
+                </div>
+                <div class="nav-section">
+                  <div class="nav-label">Access</div>
+                  <div class="nav-item">Users</div>
+                  <div class="nav-item">Roles</div>
+                  <div class="nav-item">API Keys</div>
+                </div>
+                <div class="nav-section">
+                  <div class="nav-label">Infrastructure</div>
+                  <div class="nav-item">Cloudflare</div>
+                  <div class="nav-item">Firewall</div>
+                  <div class="nav-item">Daemon Updates</div>
+                </div>
+                <div class="sidebar-pill">
+                  <strong>Environment</strong>
+                  Daemon Online · 12 nodes healthy
+                </div>
+              </aside>
+              <main class="main">
+                <div class="topbar">
+                  <div class="search">Search nodes, users, jobs, routes, templates</div>
+                  <div class="topbar-actions">
+                    <div class="chip">Ctrl K</div>
+                    <div class="icon">!</div>
+                    <div class="icon">JA</div>
+                  </div>
+                </div>
+                <section class="hero">
+                  <div class="hero-top">
+                    <div>
+                      <h3>Infrastructure Overview</h3>
+                      <p>
+                        Operating across 12 nodes with 144 active servers, 3
+                        queued updates, and 2 resource alerts that need review.
+                      </p>
+                    </div>
+                    <div class="hero-actions">
+                      <div class="hero-btn">Add Node</div>
+                      <div class="hero-btn secondary">Review Alerts</div>
+                    </div>
+                  </div>
+                  <div class="metric-grid">
+                    <div class="metric-card">
+                      <div class="label">Servers</div>
+                      <strong>144</strong>
+                      <small>132 online · 6 suspended</small>
+                    </div>
+                    <div class="metric-card">
+                      <div class="label">Users</div>
+                      <strong>1,284</strong>
+                      <small>42 active in the last hour</small>
+                    </div>
+                    <div class="metric-card">
+                      <div class="label">Node Load</div>
+                      <strong>67%</strong>
+                      <small>Peak 81% in SYD-02</small>
+                    </div>
+                    <div class="metric-card">
+                      <div class="label">Failed Jobs</div>
+                      <strong>3</strong>
+                      <small>2 backup retries pending</small>
+                    </div>
+                  </div>
+                </section>
+                <section class="body-grid">
+                  <div class="panel">
+                    <div class="panel-header">
+                      <h4>Node Health Summary</h4>
+                      <span class="status online">12 online</span>
+                    </div>
+                    <div class="mini-grid">
+                      <div class="mini"><strong>76%</strong><span>CPU cluster load</span></div>
+                      <div class="mini"><strong>412 GB</strong><span>Memory in use</span></div>
+                      <div class="mini"><strong>8.2 TB</strong><span>Disk consumed</span></div>
+                      <div class="mini"><strong>3</strong><span>Updates available</span></div>
+                    </div>
+                    <div class="chart"></div>
+                  </div>
+                  <div class="table-card">
+                    <div class="table-header">
+                      <h4>Recent Audit Events</h4>
+                      <span class="status warn">2 alerts</span>
+                    </div>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Actor</th>
+                          <th>Action</th>
+                          <th>Target</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>jason</td>
+                          <td>Rotated API key</td>
+                          <td>Billing Sync</td>
+                        </tr>
+                        <tr>
+                          <td>system</td>
+                          <td>Backup failed</td>
+                          <td>survival-eu</td>
+                        </tr>
+                        <tr>
+                          <td>admin</td>
+                          <td>Node maintenance</td>
+                          <td>SYD-02</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              </main>
+            </div>
+          </div>
+          <div class="notes">
+            <ul>
+              <li>Best fit if Leviathan should feel premium, capable, and still fast to operate.</li>
+              <li>Works well for both admin and user shells with shared components.</li>
+              <li>Lets detail pages stay dense without making the whole product feel cramped.</li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="direction dense">
+          <div class="direction-header">
+            <h2>B. Ops Grid</h2>
+            <span class="badge alt">Denser</span>
+          </div>
+          <div class="direction-copy">
+            More operational and table-forward. Higher information density, tighter
+            spacing, and faster scanning for admins who live in nodes, jobs,
+            routes, and audits all day.
+          </div>
+          <div class="mockup">
+            <div class="app-shell">
+              <aside class="sidebar">
+                <div class="brand">
+                  <span class="brand-mark"></span>
+                  <div>
+                    <strong>Leviathan</strong>
+                    <small>Operations</small>
+                  </div>
+                </div>
+                <div class="nav-section">
+                  <div class="nav-label">Main</div>
+                  <div class="nav-item active">Overview</div>
+                  <div class="nav-item">Servers</div>
+                  <div class="nav-item">Nodes</div>
+                  <div class="nav-item">Jobs</div>
+                  <div class="nav-item">Backups</div>
+                </div>
+                <div class="nav-section">
+                  <div class="nav-label">Infrastructure</div>
+                  <div class="nav-item">Allocations</div>
+                  <div class="nav-item">Cloudflare</div>
+                  <div class="nav-item">Firewall</div>
+                  <div class="nav-item">Updates</div>
+                </div>
+                <div class="sidebar-pill">
+                  <strong>Queue Health</strong>
+                  14 running · 2 failed · lock healthy
+                </div>
+              </aside>
+              <main class="main">
+                <div class="topbar">
+                  <div class="search">Quick search · node, server, webhook, api key</div>
+                  <div class="topbar-actions">
+                    <div class="icon">!</div>
+                    <div class="icon">JA</div>
+                  </div>
+                </div>
+                <section class="hero">
+                  <div class="hero-top">
+                    <div>
+                      <h3>Operations Grid</h3>
+                      <p>Fast visual scanning across high-signal metrics and live infra state.</p>
+                    </div>
+                    <div class="hero-actions">
+                      <div class="hero-btn">Add Node</div>
+                    </div>
+                  </div>
+                  <div class="metric-grid">
+                    <div class="metric-card"><div class="label">Nodes</div><strong>12</strong><small>1 maintenance</small></div>
+                    <div class="metric-card"><div class="label">CPU</div><strong>71%</strong><small>Cluster average</small></div>
+                    <div class="metric-card"><div class="label">RAM</div><strong>412 GB</strong><small>In use</small></div>
+                    <div class="metric-card"><div class="label">Disk</div><strong>8.2 TB</strong><small>Across all nodes</small></div>
+                  </div>
+                </section>
+                <section class="body-grid">
+                  <div class="table-card">
+                    <div class="table-header">
+                      <h4>Nodes</h4>
+                      <span class="status online">healthy</span>
+                    </div>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Node</th>
+                          <th>Status</th>
+                          <th>Load</th>
+                          <th>Servers</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>SYD-01</td>
+                          <td><span class="status online">online</span></td>
+                          <td>62%</td>
+                          <td>18</td>
+                        </tr>
+                        <tr>
+                          <td>SYD-02</td>
+                          <td><span class="status warn">maintenance</span></td>
+                          <td>79%</td>
+                          <td>14</td>
+                        </tr>
+                        <tr>
+                          <td>MEL-01</td>
+                          <td><span class="status online">online</span></td>
+                          <td>58%</td>
+                          <td>12</td>
+                        </tr>
+                        <tr>
+                          <td>FRA-01</td>
+                          <td><span class="status danger">alert</span></td>
+                          <td>88%</td>
+                          <td>21</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div class="panel">
+                    <div class="panel-header">
+                      <h4>Job Queue</h4>
+                      <span class="status danger">2 failed</span>
+                    </div>
+                    <div class="mini-grid">
+                      <div class="mini"><strong>14</strong><span>running</span></div>
+                      <div class="mini"><strong>29</strong><span>pending</span></div>
+                      <div class="mini"><strong>2</strong><span>failed</span></div>
+                      <div class="mini"><strong>4</strong><span>retries</span></div>
+                    </div>
+                    <div class="chart"></div>
+                  </div>
+                </section>
+              </main>
+            </div>
+          </div>
+          <div class="notes">
+            <ul>
+              <li>Best fit if the admin panel should feel like an operations workstation first.</li>
+              <li>Stronger for nodes, queue, firewall, and audit-heavy pages than for user-facing pages.</li>
+              <li>Higher risk of feeling too intense if every page follows this density level.</li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="direction executive">
+          <div class="direction-header">
+            <h2>C. Strategic Depth</h2>
+            <span class="badge alt">More spacious</span>
+          </div>
+          <div class="direction-copy">
+            More elevated and chart-led. Feels polished and premium, but lighter
+            on raw density. Useful if the top level should feel more “control
+            tower” than “operations desk.”
+          </div>
+          <div class="mockup">
+            <div class="app-shell">
+              <aside class="sidebar">
+                <div class="brand">
+                  <span class="brand-mark"></span>
+                  <div>
+                    <strong>Leviathan</strong>
+                    <small>Overview</small>
+                  </div>
+                </div>
+                <div class="nav-section">
+                  <div class="nav-label">Main</div>
+                  <div class="nav-item active">Overview</div>
+                  <div class="nav-item">Nodes</div>
+                  <div class="nav-item">Servers</div>
+                  <div class="nav-item">Alerts</div>
+                </div>
+                <div class="nav-section">
+                  <div class="nav-label">System</div>
+                  <div class="nav-item">Integrations</div>
+                  <div class="nav-item">Settings</div>
+                </div>
+                <div class="sidebar-pill">
+                  <strong>Cluster Health</strong>
+                  Stable · 99.94% uptime
+                </div>
+              </aside>
+              <main class="main">
+                <div class="topbar">
+                  <div class="search">Search anything in Leviathan</div>
+                  <div class="topbar-actions">
+                    <div class="chip">12 alerts</div>
+                    <div class="icon">JA</div>
+                  </div>
+                </div>
+                <section class="hero">
+                  <div class="hero-top">
+                    <div>
+                      <h3>Leviathan Control Tower</h3>
+                      <p>
+                        Infrastructure posture, service reliability, and platform
+                        activity in one clean operational view.
+                      </p>
+                    </div>
+                    <div class="hero-actions">
+                      <div class="hero-btn">Open Alert Center</div>
+                    </div>
+                  </div>
+                  <div class="metric-grid">
+                    <div class="metric-card"><div class="label">Monthly Revenue</div><strong>$8,420</strong><small>Billing enabled</small></div>
+                    <div class="metric-card"><div class="label">Node Availability</div><strong>99.94%</strong><small>30-day rolling</small></div>
+                    <div class="metric-card"><div class="label">Open Incidents</div><strong>2</strong><small>1 requires action</small></div>
+                  </div>
+                </section>
+                <section class="body-grid">
+                  <div class="panel">
+                    <div class="panel-header">
+                      <h4>Resource Trends</h4>
+                      <span class="status online">healthy</span>
+                    </div>
+                    <div class="chart" style="height: 220px;"></div>
+                  </div>
+                </section>
+              </main>
+            </div>
+          </div>
+          <div class="notes">
+            <ul>
+              <li>Best fit if the product should feel the most premium and strategic at the top level.</li>
+              <li>Good for overview and health pages, weaker for dense daily operations.</li>
+              <li>Would likely need a second denser mode for nodes, jobs, and audit screens.</li>
+            </ul>
+          </div>
+        </section>
+      </div>
+    </div>
+  </body>
+  </html>

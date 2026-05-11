@@ -1,0 +1,22 @@
+{
+  "name": "@voltan/panel",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@voltan/shared": "workspace:*",
+    "firebase": "^11.7.1",
+    "svelte": "^5.32.0"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5.1.1",
+    "@types/node": "^22.15.29",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  }
+}

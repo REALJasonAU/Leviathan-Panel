@@ -1,0 +1,43 @@
+{
+  "id": "tpl_minecraft_java",
+  "name": "Minecraft Java",
+  "category": "game",
+  "description": "Java edition server with .env.example import support.",
+  "dockerImages": [
+    "itzg/minecraft-server:latest",
+    "ghcr.io/papermc/paper:latest"
+  ],
+  "startupCommand": "java -Xms128M -Xmx{{SERVER_MEMORY}}M -jar server.jar nogui",
+  "environmentDefinitions": [
+    {
+      "key": "EULA",
+      "displayName": "Accept EULA",
+      "description": "Must be TRUE before server start.",
+      "defaultValue": "TRUE",
+      "required": true,
+      "secret": false,
+      "readonly": false,
+      "allowedValues": ["TRUE", "FALSE"]
+    },
+    {
+      "key": "VERSION",
+      "displayName": "Minecraft Version",
+      "description": "Image version tag.",
+      "defaultValue": "1.20.6",
+      "required": true,
+      "secret": false,
+      "readonly": false,
+      "validationRule": "^[0-9.]+$",
+      "allowedValues": []
+    },
+    {
+      "key": "RCON_PASSWORD",
+      "displayName": "RCON Password",
+      "description": "Secret password for remote console.",
+      "required": true,
+      "secret": true,
+      "readonly": false,
+      "allowedValues": []
+    }
+  ]
+}

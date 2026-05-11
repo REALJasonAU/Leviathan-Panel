@@ -1,0 +1,7 @@
+tunnel: leviathan-node-01
+credentials-file: /etc/cloudflared/leviathan-node-01.json
+
+ingress:
+  - hostname: play.example.com
+    service: tcp://127.0.0.1:25565
+  - service: http_status:404

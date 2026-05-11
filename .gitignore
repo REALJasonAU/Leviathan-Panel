@@ -1,0 +1,15 @@
+node_modules
+dist
+.svelte-kit
+.vite
+.env
+.env.local
+.env.*.local
+*.tsbuildinfo
+coverage
+playwright-report
+test-results
+pnpm-lock.yaml
+firebase-debug.log
+docker-data
+tmp

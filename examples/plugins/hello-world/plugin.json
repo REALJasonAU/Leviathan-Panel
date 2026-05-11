@@ -1,0 +1,17 @@
+{
+  "id": "plugin_hello_world",
+  "name": "Hello World",
+  "version": "1.0.0",
+  "entry": "index.cjs",
+  "enabled": true,
+  "trusted": true,
+  "permissions": ["dashboard.view"],
+  "contributes": {
+    "apiRoutes": ["/hello"],
+    "webhookHandlers": ["server.create"],
+    "notificationProviders": [],
+    "serverTemplateProviders": [],
+    "adminNavigation": ["Hello Plugin"],
+    "userNavigation": []
+  }
+}

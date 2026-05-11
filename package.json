@@ -1,0 +1,31 @@
+{
+  "name": "leviathan",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.15.9",
+  "scripts": {
+    "build": "pnpm -r build",
+    "typecheck": "pnpm --filter @voltan/shared build && pnpm -r typecheck",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "lint": "eslint . --ext .ts",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "dev:api": "pnpm --filter @voltan/api dev",
+    "dev:panel": "pnpm --filter @voltan/panel dev",
+    "dev:daemon": "pnpm --filter @voltan/daemon dev",
+    "dev": "pnpm --filter @voltan/shared build && concurrently -n api,panel,daemon -c blue,green,yellow \"pnpm dev:api\" \"pnpm dev:panel\" \"pnpm dev:daemon\""
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.27.0",
+    "@playwright/test": "^1.59.1",
+    "concurrently": "^9.1.2",
+    "eslint": "^9.27.0",
+    "globals": "^16.0.0",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.32.1",
+    "vitest": "^3.1.3"
+  }
+}

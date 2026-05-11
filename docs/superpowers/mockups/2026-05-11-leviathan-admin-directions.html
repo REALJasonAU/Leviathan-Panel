@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -25,9 +25,9 @@
         --text-secondary: #94a3b8;
         --text-muted: #64748b;
         --shadow: 0 24px 64px rgba(0, 0, 0, 0.32);
-        --glow: 0 0 0 1px rgba(0, 212, 255, 0.12), 0 20px 48px rgba(0, 212, 255, 0.06);
-        font-family:
-          Inter, Geist, "SF Pro Display", "Segoe UI", sans-serif;
+        --glow:
+          0 0 0 1px rgba(0, 212, 255, 0.12), 0 20px 48px rgba(0, 212, 255, 0.06);
+        font-family: Inter, Geist, "SF Pro Display", "Segoe UI", sans-serif;
       }
 
       * {
@@ -38,8 +38,16 @@
         margin: 0;
         color: var(--text);
         background:
-          radial-gradient(circle at top left, rgba(0, 212, 255, 0.12), transparent 24%),
-          radial-gradient(circle at top right, rgba(124, 58, 237, 0.12), transparent 26%),
+          radial-gradient(
+            circle at top left,
+            rgba(0, 212, 255, 0.12),
+            transparent 24%
+          ),
+          radial-gradient(
+            circle at top right,
+            rgba(124, 58, 237, 0.12),
+            transparent 26%
+          ),
           linear-gradient(180deg, #05070d 0%, #060a12 100%);
       }
 
@@ -86,7 +94,11 @@
       .direction {
         border: 1px solid var(--border);
         border-radius: 22px;
-        background: linear-gradient(180deg, rgba(21, 30, 46, 0.94), rgba(11, 16, 32, 0.96));
+        background: linear-gradient(
+          180deg,
+          rgba(21, 30, 46, 0.94),
+          rgba(11, 16, 32, 0.96)
+        );
         box-shadow: var(--shadow);
         overflow: hidden;
       }
@@ -157,7 +169,11 @@
 
       .sidebar {
         padding: 18px 14px;
-        background: linear-gradient(180deg, rgba(11, 16, 32, 0.98), rgba(9, 14, 27, 0.98));
+        background: linear-gradient(
+          180deg,
+          rgba(11, 16, 32, 0.98),
+          rgba(9, 14, 27, 0.98)
+        );
         border-right: 1px solid rgba(51, 65, 85, 0.64);
       }
 
@@ -175,8 +191,16 @@
         height: 34px;
         border-radius: 12px;
         background:
-          radial-gradient(circle at 70% 30%, rgba(124, 58, 237, 0.72), transparent 24%),
-          linear-gradient(145deg, rgba(0, 212, 255, 0.22), rgba(17, 24, 39, 0.98));
+          radial-gradient(
+            circle at 70% 30%,
+            rgba(124, 58, 237, 0.72),
+            transparent 24%
+          ),
+          linear-gradient(
+            145deg,
+            rgba(0, 212, 255, 0.22),
+            rgba(17, 24, 39, 0.98)
+          );
         border: 1px solid rgba(0, 212, 255, 0.28);
       }
 
@@ -238,7 +262,11 @@
       .nav-item.active {
         color: var(--text);
         background:
-          linear-gradient(90deg, rgba(0, 212, 255, 0.14), rgba(124, 58, 237, 0.08)),
+          linear-gradient(
+            90deg,
+            rgba(0, 212, 255, 0.14),
+            rgba(124, 58, 237, 0.08)
+          ),
           rgba(21, 30, 46, 0.92);
         border: 1px solid rgba(0, 212, 255, 0.22);
         box-shadow: inset 0 0 0 1px rgba(0, 212, 255, 0.06);
@@ -275,8 +303,16 @@
       .main {
         padding: 18px;
         background:
-          radial-gradient(circle at top right, rgba(0, 212, 255, 0.06), transparent 20%),
-          linear-gradient(180deg, rgba(17, 24, 39, 0.92), rgba(10, 14, 23, 0.96));
+          radial-gradient(
+            circle at top right,
+            rgba(0, 212, 255, 0.06),
+            transparent 20%
+          ),
+          linear-gradient(
+            180deg,
+            rgba(17, 24, 39, 0.92),
+            rgba(10, 14, 23, 0.96)
+          );
       }
 
       .topbar {
@@ -355,7 +391,11 @@
         padding: 12px 14px;
         border-radius: 14px;
         border: 1px solid rgba(0, 212, 255, 0.2);
-        background: linear-gradient(135deg, rgba(0, 212, 255, 0.18), rgba(0, 212, 255, 0.08));
+        background: linear-gradient(
+          135deg,
+          rgba(0, 212, 255, 0.18),
+          rgba(0, 212, 255, 0.08)
+        );
         color: var(--text);
         font-size: 12px;
         font-weight: 700;
@@ -461,9 +501,16 @@
         border: 1px solid rgba(51, 65, 85, 0.5);
         background:
           linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(148, 163, 184, 0.04) 1px, transparent 1px),
+          linear-gradient(
+            90deg,
+            rgba(148, 163, 184, 0.04) 1px,
+            transparent 1px
+          ),
           linear-gradient(180deg, rgba(2, 6, 23, 0.95), rgba(8, 12, 22, 0.96));
-        background-size: 100% 32px, 56px 100%, auto;
+        background-size:
+          100% 32px,
+          56px 100%,
+          auto;
         position: relative;
         overflow: hidden;
       }
@@ -478,12 +525,24 @@
       }
 
       .chart::before {
-        background: linear-gradient(90deg, transparent 0%, rgba(0, 212, 255, 0.2) 10%, rgba(0, 212, 255, 0.95) 50%, rgba(0, 212, 255, 0.15) 100%);
+        background: linear-gradient(
+          90deg,
+          transparent 0%,
+          rgba(0, 212, 255, 0.2) 10%,
+          rgba(0, 212, 255, 0.95) 50%,
+          rgba(0, 212, 255, 0.15) 100%
+        );
         transform: translateY(-34px) skewX(-18deg);
       }
 
       .chart::after {
-        background: linear-gradient(90deg, transparent 0%, rgba(167, 139, 250, 0.2) 8%, rgba(167, 139, 250, 0.9) 46%, rgba(167, 139, 250, 0.08) 100%);
+        background: linear-gradient(
+          90deg,
+          transparent 0%,
+          rgba(167, 139, 250, 0.2) 8%,
+          rgba(167, 139, 250, 0.9) 46%,
+          rgba(167, 139, 250, 0.08) 100%
+        );
         transform: translateY(-58px) skewX(-14deg);
       }
 
@@ -591,8 +650,8 @@
         <p class="eyebrow">Leviathan Admin Redesign</p>
         <h1>Visual directions for the admin shell</h1>
         <p class="subtitle">
-          These are not final pages yet. They are three shell-level directions to
-          choose the overall balance: the amount of density, the hierarchy of
+          These are not final pages yet. They are three shell-level directions
+          to choose the overall balance: the amount of density, the hierarchy of
           operational data, and the tone the rest of the admin pages should
           follow.
         </p>
@@ -646,7 +705,9 @@
               </aside>
               <main class="main">
                 <div class="topbar">
-                  <div class="search">Search nodes, users, jobs, routes, templates</div>
+                  <div class="search">
+                    Search nodes, users, jobs, routes, templates
+                  </div>
                   <div class="topbar-actions">
                     <div class="chip">Ctrl K</div>
                     <div class="icon">!</div>
@@ -697,10 +758,18 @@
                       <span class="status online">12 online</span>
                     </div>
                     <div class="mini-grid">
-                      <div class="mini"><strong>76%</strong><span>CPU cluster load</span></div>
-                      <div class="mini"><strong>412 GB</strong><span>Memory in use</span></div>
-                      <div class="mini"><strong>8.2 TB</strong><span>Disk consumed</span></div>
-                      <div class="mini"><strong>3</strong><span>Updates available</span></div>
+                      <div class="mini">
+                        <strong>76%</strong><span>CPU cluster load</span>
+                      </div>
+                      <div class="mini">
+                        <strong>412 GB</strong><span>Memory in use</span>
+                      </div>
+                      <div class="mini">
+                        <strong>8.2 TB</strong><span>Disk consumed</span>
+                      </div>
+                      <div class="mini">
+                        <strong>3</strong><span>Updates available</span>
+                      </div>
                     </div>
                     <div class="chart"></div>
                   </div>
@@ -742,9 +811,18 @@
           </div>
           <div class="notes">
             <ul>
-              <li>Best fit if Leviathan should feel premium, capable, and still fast to operate.</li>
-              <li>Works well for both admin and user shells with shared components.</li>
-              <li>Lets detail pages stay dense without making the whole product feel cramped.</li>
+              <li>
+                Best fit if Leviathan should feel premium, capable, and still
+                fast to operate.
+              </li>
+              <li>
+                Works well for both admin and user shells with shared
+                components.
+              </li>
+              <li>
+                Lets detail pages stay dense without making the whole product
+                feel cramped.
+              </li>
             </ul>
           </div>
         </section>
@@ -755,9 +833,9 @@
             <span class="badge alt">Denser</span>
           </div>
           <div class="direction-copy">
-            More operational and table-forward. Higher information density, tighter
-            spacing, and faster scanning for admins who live in nodes, jobs,
-            routes, and audits all day.
+            More operational and table-forward. Higher information density,
+            tighter spacing, and faster scanning for admins who live in nodes,
+            jobs, routes, and audits all day.
           </div>
           <div class="mockup">
             <div class="app-shell">
@@ -791,7 +869,9 @@
               </aside>
               <main class="main">
                 <div class="topbar">
-                  <div class="search">Quick search · node, server, webhook, api key</div>
+                  <div class="search">
+                    Quick search · node, server, webhook, api key
+                  </div>
                   <div class="topbar-actions">
                     <div class="icon">!</div>
                     <div class="icon">JA</div>
@@ -801,17 +881,32 @@
                   <div class="hero-top">
                     <div>
                       <h3>Operations Grid</h3>
-                      <p>Fast visual scanning across high-signal metrics and live infra state.</p>
+                      <p>
+                        Fast visual scanning across high-signal metrics and live
+                        infra state.
+                      </p>
                     </div>
                     <div class="hero-actions">
                       <div class="hero-btn">Add Node</div>
                     </div>
                   </div>
                   <div class="metric-grid">
-                    <div class="metric-card"><div class="label">Nodes</div><strong>12</strong><small>1 maintenance</small></div>
-                    <div class="metric-card"><div class="label">CPU</div><strong>71%</strong><small>Cluster average</small></div>
-                    <div class="metric-card"><div class="label">RAM</div><strong>412 GB</strong><small>In use</small></div>
-                    <div class="metric-card"><div class="label">Disk</div><strong>8.2 TB</strong><small>Across all nodes</small></div>
+                    <div class="metric-card">
+                      <div class="label">Nodes</div>
+                      <strong>12</strong><small>1 maintenance</small>
+                    </div>
+                    <div class="metric-card">
+                      <div class="label">CPU</div>
+                      <strong>71%</strong><small>Cluster average</small>
+                    </div>
+                    <div class="metric-card">
+                      <div class="label">RAM</div>
+                      <strong>412 GB</strong><small>In use</small>
+                    </div>
+                    <div class="metric-card">
+                      <div class="label">Disk</div>
+                      <strong>8.2 TB</strong><small>Across all nodes</small>
+                    </div>
                   </div>
                 </section>
                 <section class="body-grid">
@@ -863,10 +958,18 @@
                       <span class="status danger">2 failed</span>
                     </div>
                     <div class="mini-grid">
-                      <div class="mini"><strong>14</strong><span>running</span></div>
-                      <div class="mini"><strong>29</strong><span>pending</span></div>
-                      <div class="mini"><strong>2</strong><span>failed</span></div>
-                      <div class="mini"><strong>4</strong><span>retries</span></div>
+                      <div class="mini">
+                        <strong>14</strong><span>running</span>
+                      </div>
+                      <div class="mini">
+                        <strong>29</strong><span>pending</span>
+                      </div>
+                      <div class="mini">
+                        <strong>2</strong><span>failed</span>
+                      </div>
+                      <div class="mini">
+                        <strong>4</strong><span>retries</span>
+                      </div>
                     </div>
                     <div class="chart"></div>
                   </div>
@@ -876,9 +979,18 @@
           </div>
           <div class="notes">
             <ul>
-              <li>Best fit if the admin panel should feel like an operations workstation first.</li>
-              <li>Stronger for nodes, queue, firewall, and audit-heavy pages than for user-facing pages.</li>
-              <li>Higher risk of feeling too intense if every page follows this density level.</li>
+              <li>
+                Best fit if the admin panel should feel like an operations
+                workstation first.
+              </li>
+              <li>
+                Stronger for nodes, queue, firewall, and audit-heavy pages than
+                for user-facing pages.
+              </li>
+              <li>
+                Higher risk of feeling too intense if every page follows this
+                density level.
+              </li>
             </ul>
           </div>
         </section>
@@ -933,8 +1045,8 @@
                     <div>
                       <h3>Leviathan Control Tower</h3>
                       <p>
-                        Infrastructure posture, service reliability, and platform
-                        activity in one clean operational view.
+                        Infrastructure posture, service reliability, and
+                        platform activity in one clean operational view.
                       </p>
                     </div>
                     <div class="hero-actions">
@@ -942,9 +1054,18 @@
                     </div>
                   </div>
                   <div class="metric-grid">
-                    <div class="metric-card"><div class="label">Monthly Revenue</div><strong>$8,420</strong><small>Billing enabled</small></div>
-                    <div class="metric-card"><div class="label">Node Availability</div><strong>99.94%</strong><small>30-day rolling</small></div>
-                    <div class="metric-card"><div class="label">Open Incidents</div><strong>2</strong><small>1 requires action</small></div>
+                    <div class="metric-card">
+                      <div class="label">Monthly Revenue</div>
+                      <strong>$8,420</strong><small>Billing enabled</small>
+                    </div>
+                    <div class="metric-card">
+                      <div class="label">Node Availability</div>
+                      <strong>99.94%</strong><small>30-day rolling</small>
+                    </div>
+                    <div class="metric-card">
+                      <div class="label">Open Incidents</div>
+                      <strong>2</strong><small>1 requires action</small>
+                    </div>
                   </div>
                 </section>
                 <section class="body-grid">
@@ -953,7 +1074,7 @@
                       <h4>Resource Trends</h4>
                       <span class="status online">healthy</span>
                     </div>
-                    <div class="chart" style="height: 220px;"></div>
+                    <div class="chart" style="height: 220px"></div>
                   </div>
                 </section>
               </main>
@@ -961,13 +1082,22 @@
           </div>
           <div class="notes">
             <ul>
-              <li>Best fit if the product should feel the most premium and strategic at the top level.</li>
-              <li>Good for overview and health pages, weaker for dense daily operations.</li>
-              <li>Would likely need a second denser mode for nodes, jobs, and audit screens.</li>
+              <li>
+                Best fit if the product should feel the most premium and
+                strategic at the top level.
+              </li>
+              <li>
+                Good for overview and health pages, weaker for dense daily
+                operations.
+              </li>
+              <li>
+                Would likely need a second denser mode for nodes, jobs, and
+                audit screens.
+              </li>
             </ul>
           </div>
         </section>
       </div>
     </div>
   </body>
-  </html>
+</html>

@@ -6,6 +6,17 @@ const ConfigSchema = z.object({
   PORT: z.coerce.number().default(4000),
   HOST: z.string().default("0.0.0.0"),
   PANEL_ORIGIN: z.string().default("http://localhost:5173"),
+  PANEL_EXTRA_ORIGINS: z
+    .string()
+    .optional()
+    .transform((value) =>
+      value
+        ? value
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean)
+        : [],
+    ),
   MOCK_AUTH: z
     .string()
     .optional()

@@ -188,6 +188,8 @@ validate_inputs() {
     ufw|nftables) ;;
     *) fail "--firewall-provider must be ufw or nftables" ;;
   esac
+  [[ "${DAEMON_DB_NAME}" =~ ^[A-Za-z0-9_]+$ ]] || fail "--db-name must contain only letters, numbers, and underscores"
+  [[ "${DAEMON_DB_USER}" =~ ^[A-Za-z0-9_]+$ ]] || fail "--db-user must contain only letters, numbers, and underscores"
   if [[ -z "${DAEMON_DB_PASSWORD}" ]]; then
     DAEMON_DB_PASSWORD="$(random_secret 32)"
   fi
@@ -452,17 +454,16 @@ copy_source_and_build() {
 }
 
 configure_database() {
-  local db_name_escaped db_user_escaped db_password_escaped
-  db_name_escaped="$(sql_escape "${DAEMON_DB_NAME}")"
+  local db_user_escaped db_password_escaped
   db_user_escaped="$(sql_escape "${DAEMON_DB_USER}")"
   db_password_escaped="$(sql_escape "${DAEMON_DB_PASSWORD}")"
 
   log "Configuring local daemon MariaDB database '${DAEMON_DB_NAME}'..."
   run_shell "mysql -uroot <<SQL
-CREATE DATABASE IF NOT EXISTS \`${db_name_escaped}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS ${DAEMON_DB_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS '${db_user_escaped}'@'localhost' IDENTIFIED BY '${db_password_escaped}';
 ALTER USER '${db_user_escaped}'@'localhost' IDENTIFIED BY '${db_password_escaped}';
-GRANT ALL PRIVILEGES ON \`${db_name_escaped}\`.* TO '${db_user_escaped}'@'localhost';
+GRANT ALL PRIVILEGES ON ${DAEMON_DB_NAME}.* TO '${db_user_escaped}'@'localhost';
 FLUSH PRIVILEGES;
 SQL"
 }

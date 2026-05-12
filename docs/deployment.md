@@ -18,7 +18,7 @@ Fedora, Rocky Linux, AlmaLinux, CentOS Stream, and Arch Linux remain best-effort
 Recommended one-line install:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel/main/installers/panel/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel/refs/heads/master/installers/panel/install.sh)
 ```
 
 The installer will:
@@ -38,7 +38,7 @@ The installer will:
 Recommended one-line install:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel/main/installers/daemon/install.sh) \
+bash <(curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel/refs/heads/master/installers/daemon/install.sh) \
   --panel-url https://panel.example.com \
   --node-id node_123 \
   --bootstrap-token nd_bootstrap_xxx

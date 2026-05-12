@@ -52,7 +52,9 @@ describe("daemon installer scripts", () => {
       "mariadb",
       "mysql -uroot",
       "git clone --depth 1 --branch",
-      "curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel",
+      "curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel/refs/heads/master/installers/daemon/install.sh",
+      "LeviathanInstallerSecret",
+      "|| true",
     ]) {
       expect(install).toContain(token);
     }

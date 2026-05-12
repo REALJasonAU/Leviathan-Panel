@@ -9,7 +9,7 @@ WORKDIR="${WORKDIR:-$(pwd)}"
 SOURCE_DIR=""
 TEMP_SOURCE_DIR=""
 REPO_URL="${REPO_URL:-https://github.com/REALJasonAU/Leviathan-Panel.git}"
-REPO_BRANCH="${REPO_BRANCH:-main}"
+REPO_BRANCH="${REPO_BRANCH:-master}"
 PANEL_URL="${PANEL_URL:-}"
 NODE_ID="${NODE_ID:-}"
 BOOTSTRAP_TOKEN="${BOOTSTRAP_TOKEN:-}"
@@ -38,7 +38,7 @@ Leviathan daemon installer
 
 Usage:
   sudo bash install.sh --panel-url https://panel.example.com --node-id node_123 --bootstrap-token nd_bootstrap_xxx [options]
-  bash <(curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel/main/installers/daemon/install.sh) --panel-url https://panel.example.com --node-id node_123 --bootstrap-token nd_bootstrap_xxx [options]
+  bash <(curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel/refs/heads/master/installers/daemon/install.sh) --panel-url https://panel.example.com --node-id node_123 --bootstrap-token nd_bootstrap_xxx [options]
 
 Required unless prompted interactively:
   --panel-url URL             Public URL of the Leviathan panel/API
@@ -163,7 +163,15 @@ prompt_if_missing() {
 
 random_secret() {
   local length="${1:-32}"
-  LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c "${length}"
+  local secret=""
+  secret="$(
+    LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c "${length}" || true
+  )"
+  if [[ "${#secret}" -lt "${length}" ]]; then
+    secret="${secret}$(date +%s%N)LeviathanInstallerSecret"
+    secret="${secret:0:${length}}"
+  fi
+  printf "%s" "${secret}"
 }
 
 sql_escape() {
@@ -183,6 +191,7 @@ validate_inputs() {
   if [[ -z "${DAEMON_DB_PASSWORD}" ]]; then
     DAEMON_DB_PASSWORD="$(random_secret 32)"
   fi
+  log "Install configuration collected. Continuing with dependency and MariaDB setup..."
 }
 
 detect_distro() {
@@ -591,7 +600,7 @@ print_success() {
   echo "Service name: ${SERVICE_NAME}.service"
   echo
   echo "One-line installer:"
-  echo "  bash <(curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel/${REPO_BRANCH}/installers/daemon/install.sh) --panel-url ${PANEL_URL} --node-id ${NODE_ID} --bootstrap-token <bootstrap-token>"
+  echo "  bash <(curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel/refs/heads/${REPO_BRANCH}/installers/daemon/install.sh) --panel-url ${PANEL_URL} --node-id ${NODE_ID} --bootstrap-token <bootstrap-token>"
   echo
   echo "Useful commands:"
   echo "  Logs:        journalctl -u ${SERVICE_NAME}.service -f"

@@ -10,7 +10,7 @@ WORKDIR="${WORKDIR:-$(pwd)}"
 SOURCE_DIR=""
 TEMP_SOURCE_DIR=""
 REPO_URL="${REPO_URL:-https://github.com/REALJasonAU/Leviathan-Panel.git}"
-REPO_BRANCH="${REPO_BRANCH:-main}"
+REPO_BRANCH="${REPO_BRANCH:-master}"
 API_PORT="${API_PORT:-4000}"
 PANEL_PORT="${PANEL_PORT:-4173}"
 PANEL_ORIGIN="${PANEL_ORIGIN:-http://localhost:${PANEL_PORT}}"
@@ -39,7 +39,7 @@ Leviathan panel installer
 
 Usage:
   sudo bash install.sh [options]
-  bash <(curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel/main/installers/panel/install.sh) [options]
+  bash <(curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel/refs/heads/master/installers/panel/install.sh) [options]
 
 Options:
   --install-dir PATH         Install directory (default: /opt/leviathan)
@@ -179,7 +179,15 @@ prompt_if_missing() {
 
 random_secret() {
   local length="${1:-32}"
-  LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c "${length}"
+  local secret=""
+  secret="$(
+    LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c "${length}" || true
+  )"
+  if [[ "${#secret}" -lt "${length}" ]]; then
+    secret="${secret}$(date +%s%N)LeviathanInstallerSecret"
+    secret="${secret:0:${length}}"
+  fi
+  printf "%s" "${secret}"
 }
 
 sql_escape() {
@@ -205,6 +213,7 @@ validate_inputs() {
   if [[ -z "${DB_PASSWORD}" ]]; then
     DB_PASSWORD="$(random_secret 32)"
   fi
+  log "Install configuration collected. Continuing with dependency and MariaDB setup..."
 }
 
 detect_distro() {
@@ -631,7 +640,7 @@ print_success() {
   echo "Install directory: ${INSTALL_DIR}"
   echo
   echo "One-line installer:"
-  echo "  bash <(curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel/${REPO_BRANCH}/installers/panel/install.sh) --panel-origin ${PANEL_ORIGIN} --api-base-url ${API_BASE_URL}"
+  echo "  bash <(curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel/refs/heads/${REPO_BRANCH}/installers/panel/install.sh) --panel-origin ${PANEL_ORIGIN} --api-base-url ${API_BASE_URL}"
   echo
   echo "Useful commands:"
   echo "  API logs:       journalctl -u ${API_SERVICE_NAME}.service -f"

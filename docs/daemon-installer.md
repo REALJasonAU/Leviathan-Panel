@@ -21,7 +21,7 @@ Only Ubuntu and Debian should be considered fully tested until CI/container smok
 Recommended raw GitHub one-line install:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel/main/installers/daemon/install.sh) \
+bash <(curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel/refs/heads/master/installers/daemon/install.sh) \
   --panel-url https://panel.example.com \
   --node-id node_123 \
   --bootstrap-token nd_bootstrap_xxx

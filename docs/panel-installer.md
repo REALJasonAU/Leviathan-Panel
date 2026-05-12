@@ -21,7 +21,7 @@ Only Ubuntu and Debian should be treated as fully supported release-candidate ta
 Recommended raw GitHub one-line install:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel/main/installers/panel/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel/refs/heads/master/installers/panel/install.sh)
 ```
 
 Run from the Leviathan monorepo root on the panel/API host:

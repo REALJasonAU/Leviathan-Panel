@@ -53,7 +53,9 @@ describe("panel installer scripts", () => {
       "mysql -uroot",
       "pnpm --filter @voltan/api seed",
       "git clone --depth 1 --branch",
-      "curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel",
+      "curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel/refs/heads/master/installers/panel/install.sh",
+      "LeviathanInstallerSecret",
+      "|| true",
     ]) {
       expect(install).toContain(token);
     }

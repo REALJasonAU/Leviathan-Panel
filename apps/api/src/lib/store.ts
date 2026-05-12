@@ -1,5 +1,3 @@
-import type { DecodedIdToken } from "firebase-admin/auth";
-import { FieldValue } from "firebase-admin/firestore";
 import {
   AllocationSchema,
   type AllocationRecord,
@@ -71,10 +69,12 @@ import {
   AlertEventSchema,
   type AlertEventRecord,
 } from "@voltan/shared";
-import type { z } from "zod";
+import { z } from "zod";
 
 import { config } from "../config.js";
-import { firebaseEnabled, firestore } from "./firebase.js";
+import { databaseEnabled, firestore } from "./db.js";
+import { generateSessionId, type DocumentDatabase } from "./document-db.js";
+import { hashPassword, verifyPassword } from "./passwords.js";
 import { encryptSecret } from "./secrets.js";
 import { generateId, generateToken, hashToken, nowIso } from "./utils.js";
 
@@ -99,6 +99,33 @@ type UpdateNodeMaintenanceInput = z.infer<
 >;
 type UpdateUserRolesInput = z.infer<typeof UpdateUserRolesInputSchema>;
 type UpdateSettingsInput = z.infer<typeof UpdateSettingsInputSchema>;
+type ExternalIdentity = {
+  uid?: string;
+  email?: string;
+  name?: string;
+  picture?: string;
+};
+
+const LocalAccountSchema = z.object({
+  userId: z.string().min(1),
+  username: z.string().min(1),
+  usernameLower: z.string().min(1),
+  emailLower: z.string().email(),
+  passwordHash: z.string().min(1),
+  createdAt: z.string().min(1),
+  updatedAt: z.string().min(1),
+});
+
+const SessionRecordSchema = z.object({
+  id: z.string().min(1),
+  userId: z.string().min(1),
+  expiresAt: z.string().min(1),
+  createdAt: z.string().min(1),
+  updatedAt: z.string().min(1),
+});
+
+type LocalAccountRecord = z.infer<typeof LocalAccountSchema>;
+type SessionRecord = z.infer<typeof SessionRecordSchema>;
 
 const onlineThresholdSeconds = 45;
 
@@ -261,15 +288,29 @@ export type AuthContext = {
   user: UserRecord;
   roles: RoleRecord[];
   permissions: string[];
-  authType?: "firebase" | "mock" | "apiKey";
+  authType?: "session" | "mock" | "apiKey";
   apiKeyId?: string;
 };
 
 export interface Store {
   upsertUserFromAuth(
-    token: DecodedIdToken | null,
+    token: ExternalIdentity | null,
     mode: "admin" | "user",
   ): Promise<AuthContext>;
+  createLocalUser(input: {
+    username: string;
+    email: string;
+    password: string;
+    roleIds?: string[];
+    displayName?: string;
+  }): Promise<UserRecord>;
+  authenticateLocalUser(
+    identifier: string,
+    password: string,
+  ): Promise<AuthContext | null>;
+  createSession(userId: string): Promise<string>;
+  getAuthBySession(sessionId: string): Promise<AuthContext | null>;
+  deleteSession(sessionId: string): Promise<void>;
   getRolesByIds(roleIds: string[]): Promise<RoleRecord[]>;
   listRoles(): Promise<RoleRecord[]>;
   createRole(input: CreateRoleInput): Promise<RoleRecord>;
@@ -468,42 +509,457 @@ export interface Store {
 }
 
 class MemoryStore implements Store {
-  private readonly users = new Map<string, UserRecord>();
-  private readonly roles = new Map<string, RoleRecord>([
+  protected readonly users = new Map<string, UserRecord>();
+  protected readonly roles = new Map<string, RoleRecord>([
     [adminRole.id, adminRole],
     [staffRole.id, staffRole],
     [userRole.id, userRole],
   ]);
-  private readonly nodes = new Map<string, NodeRecord>();
-  private readonly templates = new Map<string, TemplateRecord>([
+  protected readonly nodes = new Map<string, NodeRecord>();
+  protected readonly templates = new Map<string, TemplateRecord>([
     [starterTemplate.id, starterTemplate],
   ]);
-  private readonly servers = new Map<string, ServerRecord>();
-  private readonly allocations = new Map<string, AllocationRecord>();
-  private readonly backups = new Map<string, BackupRecord>();
-  private readonly backupTargets = new Map<string, BackupTargetRecord>();
-  private readonly tasks = new Map<string, ScheduledTaskRecord>();
-  private readonly jobs = new Map<string, JobRecord>();
-  private readonly metrics: MetricPointRecord[] = [];
-  private readonly apiKeys = new Map<string, ApiKeyRecord>();
-  private readonly webhooks = new Map<string, WebhookRecord>();
-  private readonly webhookDeliveries = new Map<string, WebhookDeliveryRecord>();
-  private readonly alertRules = new Map<string, AlertRuleRecord>();
-  private readonly alertEvents = new Map<string, AlertEventRecord>();
-  private readonly domainMappings = new Map<string, DomainMappingRecord>();
-  private readonly firewallRules = new Map<string, FirewallRuleRecord>();
-  private readonly cloudflareRoutes = new Map<string, CloudflareRouteRecord>();
-  private readonly daemonUpdateHistory = new Map<
+  protected readonly servers = new Map<string, ServerRecord>();
+  protected readonly allocations = new Map<string, AllocationRecord>();
+  protected readonly backups = new Map<string, BackupRecord>();
+  protected readonly backupTargets = new Map<string, BackupTargetRecord>();
+  protected readonly tasks = new Map<string, ScheduledTaskRecord>();
+  protected readonly jobs = new Map<string, JobRecord>();
+  protected readonly metrics: MetricPointRecord[] = [];
+  protected readonly apiKeys = new Map<string, ApiKeyRecord>();
+  protected readonly webhooks = new Map<string, WebhookRecord>();
+  protected readonly webhookDeliveries = new Map<
+    string,
+    WebhookDeliveryRecord
+  >();
+  protected readonly alertRules = new Map<string, AlertRuleRecord>();
+  protected readonly alertEvents = new Map<string, AlertEventRecord>();
+  protected readonly domainMappings = new Map<string, DomainMappingRecord>();
+  protected readonly firewallRules = new Map<string, FirewallRuleRecord>();
+  protected readonly cloudflareRoutes = new Map<
+    string,
+    CloudflareRouteRecord
+  >();
+  protected readonly daemonUpdateHistory = new Map<
     string,
     DaemonUpdateHistoryRecord
   >();
-  private readonly pluginManifests = new Map<string, PluginManifest>();
-  private readonly sftpCredentials = new Map<string, SftpCredentialRecord>();
-  private readonly auditLogs: AuditLogRecord[] = [];
-  private settings = defaultSettings;
+  protected readonly pluginManifests = new Map<string, PluginManifest>();
+  protected readonly sftpCredentials = new Map<string, SftpCredentialRecord>();
+  protected readonly localAccounts = new Map<string, LocalAccountRecord>();
+  protected readonly sessions = new Map<string, SessionRecord>();
+  protected readonly auditLogs: AuditLogRecord[] = [];
+  protected settings = defaultSettings;
+  private readonly persistence: DocumentDatabase | null;
+
+  constructor(persistence: DocumentDatabase | null = null) {
+    this.persistence = persistence;
+  }
+
+  async initialize() {
+    if (!this.persistence) {
+      return;
+    }
+
+    const loadMap = async <
+      T extends { id?: string; uid?: string; userId?: string },
+    >(
+      collection: string,
+      parse: (value: Record<string, unknown>) => T,
+      keyResolver: (value: T) => string,
+      target: Map<string, T>,
+    ) => {
+      target.clear();
+      const snapshot = await this.persistence!.collection(collection).get();
+      for (const doc of snapshot.docs) {
+        const parsed = parse({
+          id: doc.id,
+          ...(doc.data() ?? {}),
+        });
+        target.set(keyResolver(parsed), parsed);
+      }
+    };
+
+    const loadArray = async <T>(
+      collection: string,
+      parse: (value: Record<string, unknown>) => T,
+      target: T[],
+    ) => {
+      target.length = 0;
+      const snapshot = await this.persistence!.collection(collection).get();
+      const values = snapshot.docs
+        .map((doc) =>
+          parse({
+            id: doc.id,
+            ...(doc.data() ?? {}),
+          }),
+        )
+        .sort((left, right) =>
+          JSON.stringify(left).localeCompare(JSON.stringify(right)),
+        );
+      target.push(...values);
+    };
+
+    await loadMap(
+      "users",
+      (value) => UserSchema.parse(value),
+      (value) => value.uid,
+      this.users,
+    );
+    await loadMap(
+      "roles",
+      (value) => RoleSchema.parse(value),
+      (value) => value.id,
+      this.roles,
+    );
+    await loadMap(
+      "nodes",
+      (value) => NodeSchema.parse(value),
+      (value) => value.id,
+      this.nodes,
+    );
+    await loadMap(
+      "templates",
+      (value) => TemplateSchema.parse(value),
+      (value) => value.id,
+      this.templates,
+    );
+    await loadMap(
+      "servers",
+      (value) => ServerSchema.parse(value),
+      (value) => value.id,
+      this.servers,
+    );
+    await loadMap(
+      "allocations",
+      (value) => AllocationSchema.parse(value),
+      (value) => value.id!,
+      this.allocations,
+    );
+    await loadMap(
+      "backups",
+      (value) => BackupSchema.parse(value),
+      (value) => value.id,
+      this.backups,
+    );
+    await loadMap(
+      "backupTargets",
+      (value) => BackupTargetSchema.parse(value),
+      (value) => value.id,
+      this.backupTargets,
+    );
+    await loadMap(
+      "scheduledTasks",
+      (value) => ScheduledTaskSchema.parse(value),
+      (value) => value.id,
+      this.tasks,
+    );
+    await loadMap(
+      "jobs",
+      (value) => JobRecordSchema.parse(value),
+      (value) => value.id,
+      this.jobs,
+    );
+    await loadArray(
+      "metrics",
+      (value) => MetricPointSchema.parse(value),
+      this.metrics,
+    );
+    await loadMap(
+      "apiKeys",
+      (value) => ApiKeySchema.parse(value),
+      (value) => value.id,
+      this.apiKeys,
+    );
+    await loadMap(
+      "webhooks",
+      (value) => WebhookSchema.parse(value),
+      (value) => value.id,
+      this.webhooks,
+    );
+    await loadMap(
+      "webhookDeliveries",
+      (value) => WebhookDeliverySchema.parse(value),
+      (value) => value.id,
+      this.webhookDeliveries,
+    );
+    await loadMap(
+      "alertRules",
+      (value) => AlertRuleSchema.parse(value),
+      (value) => value.id,
+      this.alertRules,
+    );
+    await loadMap(
+      "alertEvents",
+      (value) => AlertEventSchema.parse(value),
+      (value) => value.id,
+      this.alertEvents,
+    );
+    await loadMap(
+      "domainMappings",
+      (value) => DomainMappingSchema.parse(value),
+      (value) => value.id,
+      this.domainMappings,
+    );
+    await loadMap(
+      "firewallRules",
+      (value) => FirewallRuleSchema.parse(value),
+      (value) => value.id,
+      this.firewallRules,
+    );
+    await loadMap(
+      "cloudflareRoutes",
+      (value) => CloudflareRouteSchema.parse(value),
+      (value) => value.id,
+      this.cloudflareRoutes,
+    );
+    await loadMap(
+      "daemonUpdateHistory",
+      (value) => DaemonUpdateHistorySchema.parse(value),
+      (value) => value.id,
+      this.daemonUpdateHistory,
+    );
+    await loadMap(
+      "pluginManifests",
+      (value) => PluginManifestSchema.parse(value),
+      (value) => value.id,
+      this.pluginManifests,
+    );
+    await loadMap(
+      "sftpCredentials",
+      (value) => SftpCredentialSchema.parse(value),
+      (value) => value.serverId,
+      this.sftpCredentials,
+    );
+    await loadMap(
+      "localAccounts",
+      (value) => LocalAccountSchema.parse(value),
+      (value) => value.userId,
+      this.localAccounts,
+    );
+    await loadMap(
+      "sessions",
+      (value) => SessionRecordSchema.parse(value),
+      (value) => value.id,
+      this.sessions,
+    );
+    await loadArray(
+      "auditLogs",
+      (value) => AuditLogSchema.parse(value),
+      this.auditLogs,
+    );
+
+    const settingsSnapshot = await this.persistence
+      .collection("settings")
+      .doc("global")
+      .get();
+    if (settingsSnapshot.exists) {
+      this.settings = SettingsSchema.parse(settingsSnapshot.data());
+    }
+
+    if (!this.roles.size) {
+      this.roles.set(adminRole.id, adminRole);
+      this.roles.set(staffRole.id, staffRole);
+      this.roles.set(userRole.id, userRole);
+      await this.persistRole(adminRole);
+      await this.persistRole(staffRole);
+      await this.persistRole(userRole);
+    }
+
+    if (!this.templates.size) {
+      this.templates.set(starterTemplate.id, starterTemplate);
+      await this.persistTemplate(starterTemplate);
+    }
+
+    if (!settingsSnapshot.exists) {
+      await this.persistence
+        .collection("settings")
+        .doc("global")
+        .set(this.settings);
+    }
+  }
+
+  private async persistDoc(
+    collection: string,
+    id: string,
+    value: Record<string, unknown>,
+  ) {
+    if (!this.persistence) {
+      return;
+    }
+    await this.persistence.collection(collection).doc(id).set(value);
+  }
+
+  private async deleteDoc(collection: string, id: string) {
+    if (!this.persistence) {
+      return;
+    }
+    await this.persistence.collection(collection).doc(id).delete();
+  }
+
+  private async replaceCollection(
+    collection: string,
+    values: Array<{ id: string; value: Record<string, unknown> }>,
+  ) {
+    if (!this.persistence) {
+      return;
+    }
+    const existing = await this.persistence.collection(collection).get();
+    const nextIds = new Set(values.map((entry) => entry.id));
+    await Promise.all(
+      existing.docs
+        .filter((doc) => !nextIds.has(doc.id))
+        .map((doc) => doc.ref.delete()),
+    );
+    await Promise.all(
+      values.map((entry) =>
+        this.persistence!.collection(collection).doc(entry.id).set(entry.value),
+      ),
+    );
+  }
+
+  private async persistUser(user: UserRecord) {
+    await this.persistDoc("users", user.uid, user);
+  }
+
+  private async persistRole(role: RoleRecord) {
+    await this.persistDoc("roles", role.id, role);
+  }
+
+  private async persistTemplate(template: TemplateRecord) {
+    await this.persistDoc("templates", template.id, template);
+  }
+
+  async createLocalUser(input: {
+    username: string;
+    email: string;
+    password: string;
+    roleIds?: string[];
+    displayName?: string;
+  }) {
+    const username = input.username.trim();
+    const email = input.email.trim().toLowerCase();
+    const usernameLower = username.toLowerCase();
+
+    const duplicate = [...this.localAccounts.values()].find(
+      (account) =>
+        account.usernameLower === usernameLower || account.emailLower === email,
+    );
+    if (duplicate) {
+      throw new Error(
+        "A local account with that username or email already exists",
+      );
+    }
+
+    const user = UserSchema.parse({
+      uid: generateId("usr"),
+      email,
+      displayName: input.displayName?.trim() || username,
+      roleIds: input.roleIds?.length ? input.roleIds : ["user"],
+      serverIds: [],
+      twoFactorRequired: false,
+      disabled: false,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+      lastLoginAt: nowIso(),
+    });
+    const account = LocalAccountSchema.parse({
+      userId: user.uid,
+      username,
+      usernameLower,
+      emailLower: email,
+      passwordHash: await hashPassword(input.password),
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    });
+
+    this.users.set(user.uid, user);
+    this.localAccounts.set(user.uid, account);
+    await this.persistUser(user);
+    await this.persistDoc("localAccounts", account.userId, account);
+    return user;
+  }
+
+  async authenticateLocalUser(identifier: string, password: string) {
+    const needle = identifier.trim().toLowerCase();
+    const account = [...this.localAccounts.values()].find(
+      (entry) => entry.usernameLower === needle || entry.emailLower === needle,
+    );
+    if (!account) {
+      return null;
+    }
+    const valid = await verifyPassword(password, account.passwordHash);
+    if (!valid) {
+      return null;
+    }
+    const user = this.users.get(account.userId);
+    if (!user || user.disabled) {
+      return null;
+    }
+    const updatedUser = UserSchema.parse({
+      ...user,
+      lastLoginAt: nowIso(),
+      updatedAt: nowIso(),
+    });
+    this.users.set(updatedUser.uid, updatedUser);
+    await this.persistUser(updatedUser);
+    const roles = await this.getRolesByIds(updatedUser.roleIds);
+    const permissions = [...new Set(roles.flatMap((role) => role.permissions))];
+    return {
+      user: updatedUser,
+      roles,
+      permissions,
+      authType: "session" as const,
+    };
+  }
+
+  async createSession(userId: string) {
+    const id = generateSessionId();
+    const record = SessionRecordSchema.parse({
+      id,
+      userId,
+      expiresAt: new Date(
+        Date.now() + config.SESSION_TTL_HOURS * 60 * 60 * 1000,
+      ).toISOString(),
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    });
+    this.sessions.set(record.id, record);
+    await this.persistDoc("sessions", record.id, record);
+    return id;
+  }
+
+  async getAuthBySession(sessionId: string) {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      return null;
+    }
+    if (new Date(session.expiresAt).getTime() <= Date.now()) {
+      this.sessions.delete(sessionId);
+      await this.deleteDoc("sessions", sessionId);
+      return null;
+    }
+    const user = this.users.get(session.userId);
+    if (!user || user.disabled) {
+      return null;
+    }
+    const roles = await this.getRolesByIds(user.roleIds);
+    const permissions = [...new Set(roles.flatMap((role) => role.permissions))];
+    return {
+      user,
+      roles,
+      permissions,
+      authType: "session" as const,
+    };
+  }
+
+  async deleteSession(sessionId: string) {
+    this.sessions.delete(sessionId);
+    await this.deleteDoc("sessions", sessionId);
+  }
 
   async upsertUserFromAuth(
-    token: DecodedIdToken | null,
+    token: ExternalIdentity | null,
     mode: "admin" | "user",
   ): Promise<AuthContext> {
     const uid = token?.uid ?? `dev-${mode}`;
@@ -527,6 +983,7 @@ class MemoryStore implements Store {
       lastLoginAt: nowIso(),
     });
     this.users.set(uid, user);
+    await this.persistUser(user);
 
     const roles = await this.getRolesByIds(user.roleIds);
     const permissions = [...new Set(roles.flatMap((role) => role.permissions))];
@@ -1548,7 +2005,7 @@ class MemoryStore implements Store {
   }
 }
 
-class FirestoreStore implements Store {
+class SqlStore implements Store {
   private async listCollection<T>(
     collectionName: string,
     parse: (value: Record<string, unknown>, id: string) => T,
@@ -1559,8 +2016,152 @@ class FirestoreStore implements Store {
     );
   }
 
+  async createLocalUser(input: {
+    username: string;
+    email: string;
+    password: string;
+    roleIds?: string[];
+    displayName?: string;
+  }) {
+    const username = input.username.trim();
+    const email = input.email.trim().toLowerCase();
+    const usernameLower = username.toLowerCase();
+
+    const accounts = await this.listCollection("localAccounts", (data) =>
+      LocalAccountSchema.parse(data),
+    );
+    const duplicate = accounts.find(
+      (account) =>
+        account.usernameLower === usernameLower || account.emailLower === email,
+    );
+    if (duplicate) {
+      throw new Error(
+        "A local account with that username or email already exists",
+      );
+    }
+
+    const user = UserSchema.parse({
+      uid: generateId("usr"),
+      email,
+      displayName: input.displayName?.trim() || username,
+      roleIds: input.roleIds?.length ? input.roleIds : ["user"],
+      serverIds: [],
+      twoFactorRequired: false,
+      disabled: false,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+      lastLoginAt: nowIso(),
+    });
+
+    const account = LocalAccountSchema.parse({
+      userId: user.uid,
+      username,
+      usernameLower,
+      emailLower: email,
+      passwordHash: await hashPassword(input.password),
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    });
+
+    await firestore!.collection("users").doc(user.uid).set(user);
+    await firestore!.collection("localAccounts").doc(user.uid).set(account);
+    return user;
+  }
+
+  async authenticateLocalUser(identifier: string, password: string) {
+    const needle = identifier.trim().toLowerCase();
+    const accounts = await this.listCollection("localAccounts", (data) =>
+      LocalAccountSchema.parse(data),
+    );
+    const account = accounts.find(
+      (entry) => entry.usernameLower === needle || entry.emailLower === needle,
+    );
+    if (!account) {
+      return null;
+    }
+    const valid = await verifyPassword(password, account.passwordHash);
+    if (!valid) {
+      return null;
+    }
+    const ref = firestore!.collection("users").doc(account.userId);
+    const snapshot = await ref.get();
+    if (!snapshot.exists) {
+      return null;
+    }
+    const user = UserSchema.parse(snapshot.data());
+    if (user.disabled) {
+      return null;
+    }
+    const updated = UserSchema.parse({
+      ...user,
+      lastLoginAt: nowIso(),
+      updatedAt: nowIso(),
+    });
+    await ref.set(updated);
+    const roles = await this.getRolesByIds(updated.roleIds);
+    const permissions = [...new Set(roles.flatMap((role) => role.permissions))];
+    return {
+      user: updated,
+      roles,
+      permissions,
+      authType: "session" as const,
+    };
+  }
+
+  async createSession(userId: string) {
+    const record = SessionRecordSchema.parse({
+      id: generateSessionId(),
+      userId,
+      expiresAt: new Date(
+        Date.now() + config.SESSION_TTL_HOURS * 60 * 60 * 1000,
+      ).toISOString(),
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    });
+    await firestore!.collection("sessions").doc(record.id).set(record);
+    return record.id;
+  }
+
+  async getAuthBySession(sessionId: string) {
+    const snapshot = await firestore!
+      .collection("sessions")
+      .doc(sessionId)
+      .get();
+    if (!snapshot.exists) {
+      return null;
+    }
+    const session = SessionRecordSchema.parse(snapshot.data());
+    if (new Date(session.expiresAt).getTime() <= Date.now()) {
+      await firestore!.collection("sessions").doc(sessionId).delete();
+      return null;
+    }
+    const userSnapshot = await firestore!
+      .collection("users")
+      .doc(session.userId)
+      .get();
+    if (!userSnapshot.exists) {
+      return null;
+    }
+    const user = UserSchema.parse(userSnapshot.data());
+    if (user.disabled) {
+      return null;
+    }
+    const roles = await this.getRolesByIds(user.roleIds);
+    const permissions = [...new Set(roles.flatMap((role) => role.permissions))];
+    return {
+      user,
+      roles,
+      permissions,
+      authType: "session" as const,
+    };
+  }
+
+  async deleteSession(sessionId: string) {
+    await firestore!.collection("sessions").doc(sessionId).delete();
+  }
+
   async upsertUserFromAuth(
-    token: DecodedIdToken | null,
+    token: ExternalIdentity | null,
     mode: "admin" | "user",
   ): Promise<AuthContext> {
     const uid = token?.uid ?? `dev-${mode}`;
@@ -1591,7 +2192,7 @@ class FirestoreStore implements Store {
     await ref.set(payload, { merge: true });
     const roles = await this.getRolesByIds(payload.roleIds);
     const permissions = [...new Set(roles.flatMap((role) => role.permissions))];
-    return { user: payload, roles, permissions };
+    return { user: payload, roles, permissions, authType: "mock" };
   }
 
   async getRolesByIds(roleIds: string[]) {
@@ -1920,16 +2521,18 @@ class FirestoreStore implements Store {
       lastCrashAt: null,
     });
     await firestore.collection("servers").doc(server.id).set(server);
-    await firestore
-      .collection("users")
-      .doc(server.ownerId)
-      .set(
+    const ownerRef = firestore.collection("users").doc(server.ownerId);
+    const ownerSnapshot = await ownerRef.get();
+    if (ownerSnapshot.exists) {
+      const owner = UserSchema.parse(ownerSnapshot.data());
+      await ownerRef.set(
         {
-          serverIds: FieldValue.arrayUnion(server.id),
+          serverIds: [...new Set([...owner.serverIds, server.id])],
           updatedAt: nowIso(),
         },
         { merge: true },
       );
+    }
     return server;
   }
 
@@ -2769,7 +3372,30 @@ class FirestoreStore implements Store {
   }
 }
 
-export const store: Store =
-  config.MOCK_DATA || !firebaseEnabled
-    ? new MemoryStore()
-    : new FirestoreStore();
+const createStore = async (): Promise<Store> => {
+  if (config.MOCK_DATA || !databaseEnabled) {
+    const memory = new MemoryStore();
+    return memory;
+  }
+
+  const sql = new SqlStore();
+  const [roles, templates] = await Promise.all([
+    sql.listRoles(),
+    sql.listTemplates(),
+  ]);
+  if (roles.length === 0) {
+    await firestore!.collection("roles").doc(adminRole.id).set(adminRole);
+    await firestore!.collection("roles").doc(staffRole.id).set(staffRole);
+    await firestore!.collection("roles").doc(userRole.id).set(userRole);
+  }
+  if (templates.length === 0) {
+    await firestore!
+      .collection("templates")
+      .doc(starterTemplate.id)
+      .set(starterTemplate);
+  }
+  await sql.getSettings();
+  return sql;
+};
+
+export const store: Store = await createStore();

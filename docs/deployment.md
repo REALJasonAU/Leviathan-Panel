@@ -1,307 +1,124 @@
-# Production Deployment Guide
+# Deployment Guide
 
-This guide covers the current Leviathan release-candidate deployment path. Ubuntu 22.04+ and Debian 12+ are the fully targeted operating systems. Fedora, Rocky Linux, AlmaLinux, CentOS Stream, and Arch Linux are installer-supported on a best-effort basis and should be validated in staging before production.
+## 1. Scope
 
-## 1. Recommended Topology
+This guide describes the current recommended Leviathan deployment model:
 
-- Panel/API host:
-  - Ubuntu 22.04 or Debian 12
-  - 2 vCPU minimum
-  - 4 GB RAM minimum
-  - Public HTTPS endpoint for the panel and API
-- Daemon/node host:
-  - Ubuntu 22.04 or Debian 12
-  - Docker Engine
-  - Enough disk for workspaces and backups
-  - Outbound HTTPS access to the panel/API host
-- Optional shared services:
-  - Redis for BullMQ production queue mode
-  - S3-compatible object storage for remote backups
-  - Cloudflare account for Tunnel and DNS automation
+- Ubuntu or Debian for the panel/API host
+- Ubuntu or Debian for daemon nodes
+- local MariaDB on the panel host
+- separate local MariaDB on each daemon host
+- Docker on daemon hosts
+- optional Redis/BullMQ, S3, Cloudflare, firewall, reverse proxy, and SFTP features
 
-## 2. Clone And Prepare The Repository
+Fedora, Rocky Linux, AlmaLinux, CentOS Stream, and Arch Linux remain best-effort installer targets until they receive dedicated smoke testing.
+
+## 2. Panel/API Host
+
+Recommended one-line install:
 
 ```bash
-git clone <your-leviathan-repo-url> leviathan
-cd leviathan
-corepack enable
-pnpm install
+bash <(curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel/main/installers/panel/install.sh)
 ```
 
-## 3. Panel/API Host Setup
+The installer will:
 
-The panel installer now supports distro detection, dependency installation, Docker setup, systemd services, dry-run, and update/uninstall flows.
+- install Node.js and pnpm
+- install Docker if needed
+- install and enable MariaDB
+- provision the panel database and database user
+- prompt for panel origin plus the first admin username, email, and password
+- build Leviathan
+- write `.env` files
+- install systemd services
+- enable daily update timers by default
 
-Installer docs:
+## 3. Daemon/Node Host
 
-- [Panel Installer](./panel-installer.md)
-
-Install from the repository checkout:
+Recommended one-line install:
 
 ```bash
-sudo bash installers/panel/install.sh \
-  --panel-origin https://panel.example.com \
-  --api-base-url https://panel.example.com \
-  --non-interactive
-```
-
-Validated commands after install:
-
-```bash
-systemctl status leviathan-api.service --no-pager
-systemctl status leviathan-panel.service --no-pager
-journalctl -u leviathan-api.service -f
-journalctl -u leviathan-panel.service -f
-```
-
-## 4. Firebase Setup
-
-Use the dedicated guide:
-
-- [Firebase Setup](./firebase-setup.md)
-
-At minimum:
-
-1. Create a Firebase project.
-2. Enable Authentication and the Google provider.
-3. Enable Firestore in native mode.
-4. Create a service account for the API.
-5. Populate:
-   - `apps/api/.env`
-   - `apps/panel/.env`
-6. Seed the initial admin account and default roles/templates:
-
-```bash
-cd apps/api
-export ADMIN_UID="your-firebase-uid"
-export ADMIN_EMAIL="owner@example.com"
-pnpm seed
-```
-
-## 5. Docker Setup
-
-Docker is installed automatically by the panel and daemon installers unless you pass `--skip-docker-install`.
-
-Validate the runtime:
-
-```bash
-docker info
-docker version
-systemctl status docker --no-pager
-```
-
-## 6. Redis / BullMQ Queue Setup
-
-Local development can use the in-process queue. Production should use Redis.
-
-Example Ubuntu install:
-
-```bash
-sudo apt-get update
-sudo apt-get install -y redis-server
-sudo systemctl enable --now redis-server
-redis-cli ping
-```
-
-Set API environment variables:
-
-```bash
-QUEUE_DRIVER=bullmq
-REDIS_URL=redis://127.0.0.1:6379
-```
-
-Leviathan will fall back to local queue mode only when production Redis is not configured. For release-candidate deployments, Redis is strongly recommended.
-
-## 7. S3 Backup Setup
-
-Create a backup target in the panel or seed it through the API settings flow with:
-
-- endpoint
-- region
-- bucket
-- access key ID
-- secret access key
-- optional path prefix
-- optional force path style
-
-These values are encrypted at rest by the API secret storage layer.
-
-For MinIO-style targets, set:
-
-```text
-endpoint=http://minio.internal:9000
-forcePathStyle=true
-```
-
-Backups can run locally without S3, but S3-compatible storage is recommended for disaster recovery.
-
-## 8. Daemon / Node Setup
-
-Use the dedicated daemon installer guide:
-
-- [Daemon Installer](./daemon-installer.md)
-
-Create the node in the panel first, then install on the node host:
-
-```bash
-sudo bash installers/daemon/install.sh \
+bash <(curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel/main/installers/daemon/install.sh) \
   --panel-url https://panel.example.com \
   --node-id node_123 \
-  --bootstrap-token nd_bootstrap_xxx \
-  --non-interactive
+  --bootstrap-token nd_bootstrap_xxx
 ```
 
-Validated commands after install:
+The installer will:
 
-```bash
-systemctl status leviathan-daemon.service --no-pager
-journalctl -u leviathan-daemon.service -f
-curl http://127.0.0.1:4100/health
+- install Node.js and pnpm
+- install Docker if needed
+- install and enable MariaDB
+- provision the daemon-local database and database user
+- build Leviathan
+- write the daemon `.env`
+- install the daemon systemd service
+- enable the daemon update timer by default
+
+## 4. Reverse Proxy / TLS
+
+Leviathan should sit behind a normal reverse proxy such as Caddy.
+
+Example Caddy layout:
+
+```caddy
+panel.example.com {
+  reverse_proxy /v1/* 127.0.0.1:4000
+  reverse_proxy /health 127.0.0.1:4000
+  reverse_proxy 127.0.0.1:4173
+}
 ```
 
-## 9. Reverse Proxy Setup
+## 5. Redis / BullMQ
 
-Leviathan can generate daemon-side Caddy config for server mappings, but the panel/API host still needs a front door.
+Optional for larger installs:
 
-Recommended host routing:
+- set `QUEUE_DRIVER=bullmq`
+- set `REDIS_URL=redis://...`
 
-- `https://panel.example.com/` -> Leviathan panel
-- `https://panel.example.com/v1/*` -> Leviathan API
-- `https://panel.example.com/health` -> Leviathan API health route
+If you stay with `QUEUE_DRIVER=local`, Leviathan runs the built-in worker path.
 
-If you want daemon-side generated Caddy output for workload domains, set:
+## 6. S3 Backups
 
-```bash
-LEVIATHAN_PROXY_CONFIG_PATH=/etc/caddy/conf.d/leviathan.caddy
-```
+Configure backup targets through the panel UI or API. Keep S3 credentials server-side only. Use a dedicated IAM user or S3-compatible access key with the narrowest permissions possible.
 
-Manual Caddy or Traefik validation is still part of the operator workflow before full automatic roll-forward.
+## 7. Cloudflare
 
-## 10. Cloudflare Tunnel Setup
+Cloudflare integration is optional. If enabled:
 
-Leviathan supports Cloudflare settings storage, route records, and dry-run/apply/delete lifecycle flows.
+- keep API tokens encrypted at rest
+- scope tokens narrowly to the required zone/account permissions
+- use dry-run before apply in production
 
-Provide:
+## 8. Firewall / SFTP / Reverse Proxy
 
-- account ID
-- zone ID
-- tunnel ID
-- API token
+These features are available in varying states of completeness:
 
-Cloudflare token permissions should cover:
+- firewall apply flows should be staged carefully
+- full embedded SFTP serving is still a partial area
+- reverse-proxy config generation exists and should be validated in staging before wide rollout
 
-- DNS edit for the target zone
-- Tunnel configuration edit for the target account
+## 9. Backup / Restore Recovery
 
-If you prefer manual bootstrap of `cloudflared`, install it first on the node and then use Leviathan only for config generation and route lifecycle management.
+Minimum recovery checklist:
 
-Reference example:
+1. Back up the panel MariaDB database.
+2. Back up daemon MariaDB databases where operational history matters.
+3. Back up server data directories.
+4. Back up local backup archives or validate S3 lifecycle/retention externally.
+5. Keep a copy of panel and daemon `.env` files in secure secret storage.
 
-- [examples/cloudflare/tunnel.example.yml](../examples/cloudflare/tunnel.example.yml)
+## 10. Security Checklist
 
-## 11. Firewall Setup
+Before production launch:
 
-Leviathan currently supports safe rule generation plus daemon-side application hooks. For production:
+- use HTTPS
+- keep `MOCK_AUTH=false`
+- keep `MOCK_DATA=false`
+- keep `VITE_USE_MOCK_AUTH=false`
+- rotate bootstrap and daemon tokens if exposed
+- protect MariaDB root access
+- protect panel and daemon hosts with OS-level hardening
+- verify update timers, backups, and health checks
 
-1. Decide whether the node will use `ufw` or `nftables`.
-2. Install the matching package through the daemon installer flags:
-
-```bash
-sudo bash installers/daemon/install.sh \
-  --panel-url https://panel.example.com \
-  --node-id node_123 \
-  --bootstrap-token nd_bootstrap_xxx \
-  --enable-firewall \
-  --firewall-provider ufw
-```
-
-3. Use dry-run from the panel before applying live rules.
-
-Root-level firewall enforcement remains a carefully controlled path and should be validated in staging before broad rollout.
-
-## 12. SFTP Setup
-
-Current Leviathan status:
-
-- Credential lifecycle is implemented:
-  - create
-  - rotate
-  - revoke
-  - expiry metadata
-- Network-facing production SFTP serving still requires operator-specific daemon/node setup and should be treated as partial.
-
-If you are using OpenSSH mode on a node, the installer can install the package:
-
-```bash
-sudo bash installers/daemon/install.sh \
-  --panel-url https://panel.example.com \
-  --node-id node_123 \
-  --bootstrap-token nd_bootstrap_xxx \
-  --enable-sftp-openssh
-```
-
-See Phase notes and the security checklist before enabling external SFTP access on a public node.
-
-## 13. Daemon Update Setup
-
-Leviathan supports signed update manifests and daemon-side staged update execution. For production:
-
-```bash
-DAEMON_UPDATE_APPLY_ENABLED=true
-DAEMON_UPDATE_TARGET_PATH=/usr/local/bin/leviathan-daemon
-DAEMON_UPDATE_STAGING_DIR=/var/lib/leviathan/updates
-```
-
-See:
-
-- [Release And Update Operations](./updates.md)
-
-## 14. Backup / Restore Disaster Recovery
-
-Recommended recovery posture:
-
-1. Keep local node backups for quick restore.
-2. Mirror critical workloads to S3-compatible storage.
-3. Back up Firestore separately through your Google Cloud backup process.
-4. Export panel/API environment files and service definitions.
-
-Disaster recovery checklist:
-
-1. Restore Firebase credentials and Firestore data.
-2. Restore API and panel environment files.
-3. Reinstall Leviathan on the panel/API host.
-4. Reinstall each daemon node and reconnect it to the panel.
-5. Restore server data from local or S3 backup targets.
-6. Re-validate Cloudflare, reverse proxy, and firewall state.
-
-## 15. Security Checklist
-
-Use the dedicated checklist before production go-live:
-
-- [Security Checklist](./security-checklist.md)
-
-At minimum:
-
-- terminate TLS in front of the panel/API
-- keep mock auth/data disabled
-- encrypt provider secrets
-- restrict Firestore client access
-- enable Redis for queue locking
-- validate audit logs for sensitive actions
-- verify rate limits on auth, API keys, file operations, backups, daemon updates, Cloudflare, and firewall changes
-
-## 16. Update And Uninstall Commands
-
-Panel:
-
-```bash
-sudo bash /opt/leviathan/installers/panel/update.sh
-sudo bash /opt/leviathan/installers/panel/uninstall.sh
-```
-
-Daemon:
-
-```bash
-sudo bash /opt/leviathan/installers/daemon/update.sh
-sudo bash /opt/leviathan/installers/daemon/uninstall.sh
-```
+See [Security Checklist](./security-checklist.md) for the fuller operational list.

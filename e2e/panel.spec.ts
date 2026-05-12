@@ -34,10 +34,14 @@ test("mock admin can create a node, parse env metadata, and provision a server",
   await createNodeCard.getByLabel("Public Address").fill("203.0.113.44");
   await createNodeCard.getByRole("button", { name: "Create Node" }).click();
   await expect(
-    page.getByRole("dialog", { name: new RegExp(`Bootstrap token for ${nodeName}`) }),
+    page.getByRole("dialog", {
+      name: new RegExp(`Bootstrap token for ${nodeName}`),
+    }),
   ).toBeVisible();
   await page
-    .getByRole("dialog", { name: new RegExp(`Bootstrap token for ${nodeName}`) })
+    .getByRole("dialog", {
+      name: new RegExp(`Bootstrap token for ${nodeName}`),
+    })
     .getByRole("button", { name: "Close", exact: true })
     .click();
   await expect(

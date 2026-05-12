@@ -3,6 +3,8 @@ set -euo pipefail
 
 INSTALL_DIR="${INSTALL_DIR:-/opt/leviathan}"
 SERVICE_NAME="${SERVICE_NAME:-leviathan-daemon}"
+UPDATE_SERVICE_NAME="${UPDATE_SERVICE_NAME:-leviathan-daemon-update}"
+UPDATE_TIMER_NAME="${UPDATE_TIMER_NAME:-leviathan-daemon-update}"
 KEEP_DATA=false
 DRY_RUN=false
 
@@ -45,7 +47,12 @@ if [[ "${DRY_RUN}" != "true" && "${EUID}" -ne 0 ]]; then
 fi
 
 run systemctl disable --now "${SERVICE_NAME}.service"
+if systemctl list-unit-files "${UPDATE_TIMER_NAME}.timer" >/dev/null 2>&1; then
+  run systemctl disable --now "${UPDATE_TIMER_NAME}.timer"
+fi
 run rm -f "/etc/systemd/system/${SERVICE_NAME}.service"
+run rm -f "/etc/systemd/system/${UPDATE_SERVICE_NAME}.service"
+run rm -f "/etc/systemd/system/${UPDATE_TIMER_NAME}.timer"
 run systemctl daemon-reload
 run rm -rf "${INSTALL_DIR}"
 

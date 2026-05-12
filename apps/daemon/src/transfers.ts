@@ -20,6 +20,25 @@ export type TransferGrant = {
 export class TransferManager {
   private readonly transfers = new Map<string, TransferGrant>();
 
+  constructor(
+    private readonly stateStore?: {
+      saveTransfer: (grant: TransferGrant) => Promise<void>;
+      listTransfers: () => Promise<TransferGrant[]>;
+      deleteTransfer: (id: string) => Promise<void>;
+    },
+  ) {}
+
+  async hydrate() {
+    if (!this.stateStore) {
+      return;
+    }
+    const grants = await this.stateStore.listTransfers();
+    this.transfers.clear();
+    for (const grant of grants) {
+      this.transfers.set(grant.id, grant);
+    }
+  }
+
   create(
     input: Omit<TransferGrant, "id" | "createdAt" | "expiresAt" | "cancelled">,
   ) {
@@ -32,6 +51,7 @@ export class TransferManager {
       cancelled: false,
     };
     this.transfers.set(grant.id, grant);
+    void this.stateStore?.saveTransfer(grant);
     return grant;
   }
 
@@ -53,7 +73,9 @@ export class TransferManager {
     if (!grant) {
       return false;
     }
-    this.transfers.set(id, { ...grant, cancelled: true });
+    const updated = { ...grant, cancelled: true };
+    this.transfers.set(id, updated);
+    void this.stateStore?.saveTransfer(updated);
     return true;
   }
 
@@ -62,6 +84,7 @@ export class TransferManager {
     for (const [id, grant] of this.transfers.entries()) {
       if (grant.cancelled || grant.expiresAt <= now) {
         this.transfers.delete(id);
+        void this.stateStore?.deleteTransfer(id);
       }
     }
   }

@@ -2,16 +2,26 @@
 set -euo pipefail
 
 SERVICE_NAME="${SERVICE_NAME:-leviathan-daemon}"
+UPDATE_SERVICE_NAME="${UPDATE_SERVICE_NAME:-leviathan-daemon-update}"
+UPDATE_TIMER_NAME="${UPDATE_TIMER_NAME:-leviathan-daemon-update}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/leviathan}"
 WORKDIR="${WORKDIR:-$(pwd)}"
+SOURCE_DIR=""
+TEMP_SOURCE_DIR=""
+REPO_URL="${REPO_URL:-https://github.com/REALJasonAU/Leviathan-Panel.git}"
+REPO_BRANCH="${REPO_BRANCH:-main}"
 PANEL_URL="${PANEL_URL:-}"
 NODE_ID="${NODE_ID:-}"
 BOOTSTRAP_TOKEN="${BOOTSTRAP_TOKEN:-}"
 DAEMON_BASE_DIR="${DAEMON_BASE_DIR:-/var/lib/leviathan}"
 DAEMON_PORT="${DAEMON_PORT:-4100}"
+DAEMON_DB_NAME="${DAEMON_DB_NAME:-leviathan_daemon}"
+DAEMON_DB_USER="${DAEMON_DB_USER:-leviathan_daemon}"
+DAEMON_DB_PASSWORD="${DAEMON_DB_PASSWORD:-}"
 DRY_RUN=false
 SKIP_DOCKER_INSTALL=false
 NON_INTERACTIVE=false
+AUTO_UPDATE=true
 ENABLE_CLOUDFLARE=false
 ENABLE_FIREWALL=false
 ENABLE_SFTP_OPENSSH=false
@@ -20,6 +30,7 @@ DISTRO_ID="unknown"
 DISTRO_LIKE=""
 PACKAGE_MANAGER=""
 PACKAGE_REFRESHED=false
+MARIADB_SERVICE="mariadb"
 
 usage() {
   cat <<EOF
@@ -27,6 +38,7 @@ Leviathan daemon installer
 
 Usage:
   sudo bash install.sh --panel-url https://panel.example.com --node-id node_123 --bootstrap-token nd_bootstrap_xxx [options]
+  bash <(curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel/main/installers/daemon/install.sh) --panel-url https://panel.example.com --node-id node_123 --bootstrap-token nd_bootstrap_xxx [options]
 
 Required unless prompted interactively:
   --panel-url URL             Public URL of the Leviathan panel/API
@@ -37,12 +49,18 @@ Options:
   --base-dir PATH             Daemon server data directory (default: /var/lib/leviathan)
   --daemon-port PORT          Daemon HTTP port (default: 4100)
   --install-dir PATH          Install directory (default: /opt/leviathan)
-  --workdir PATH              Source checkout to copy from (default: current directory)
+  --workdir PATH              Source checkout to copy from. If omitted or invalid, the installer clones from GitHub.
+  --repo-url URL              Leviathan Git repository (default: ${REPO_URL})
+  --repo-branch NAME          Git branch/tag to install (default: ${REPO_BRANCH})
+  --db-name NAME              Local daemon MariaDB database name (default: leviathan_daemon)
+  --db-user USER              Local daemon MariaDB user (default: leviathan_daemon)
+  --db-password PASS          Local daemon MariaDB password (default: generated)
   --enable-cloudflare         Install/check cloudflared
   --enable-firewall           Install/check ufw or nftables
   --firewall-provider NAME    ufw or nftables (default: ufw)
-  --enable-sftp-openssh       Install/check OpenSSH server for future SFTP mode
+  --enable-sftp-openssh       Install/check OpenSSH server for SFTP mode
   --skip-docker-install       Do not install Docker automatically
+  --disable-auto-update       Do not install the daily update timer
   --non-interactive           Fail instead of prompting for missing values
   --dry-run                   Print actions without changing the system
   --help                      Show this help
@@ -79,6 +97,12 @@ run_shell() {
   fi
 }
 
+cleanup_temp_source() {
+  if [[ -n "${TEMP_SOURCE_DIR}" && -d "${TEMP_SOURCE_DIR}" && "${DRY_RUN}" != "true" ]]; then
+    rm -rf "${TEMP_SOURCE_DIR}"
+  fi
+}
+
 need_root() {
   if [[ "${DRY_RUN}" == "true" ]]; then
     return
@@ -98,11 +122,17 @@ parse_args() {
       --daemon-port) DAEMON_PORT="$2"; shift 2 ;;
       --install-dir) INSTALL_DIR="$2"; shift 2 ;;
       --workdir) WORKDIR="$2"; shift 2 ;;
+      --repo-url) REPO_URL="$2"; shift 2 ;;
+      --repo-branch) REPO_BRANCH="$2"; shift 2 ;;
+      --db-name) DAEMON_DB_NAME="$2"; shift 2 ;;
+      --db-user) DAEMON_DB_USER="$2"; shift 2 ;;
+      --db-password) DAEMON_DB_PASSWORD="$2"; shift 2 ;;
       --enable-cloudflare) ENABLE_CLOUDFLARE=true; shift ;;
       --enable-firewall) ENABLE_FIREWALL=true; shift ;;
       --firewall-provider) FIREWALL_PROVIDER="$2"; shift 2 ;;
       --enable-sftp-openssh) ENABLE_SFTP_OPENSSH=true; shift ;;
       --skip-docker-install) SKIP_DOCKER_INSTALL=true; shift ;;
+      --disable-auto-update) AUTO_UPDATE=false; shift ;;
       --non-interactive) NON_INTERACTIVE=true; shift ;;
       --dry-run) DRY_RUN=true; shift ;;
       --help) usage; exit 0 ;;
@@ -131,6 +161,15 @@ prompt_if_missing() {
   printf -v "${var_name}" '%s' "${value}"
 }
 
+random_secret() {
+  local length="${1:-32}"
+  LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c "${length}"
+}
+
+sql_escape() {
+  printf "%s" "$1" | sed "s/'/''/g"
+}
+
 validate_inputs() {
   prompt_if_missing PANEL_URL "Panel URL"
   prompt_if_missing NODE_ID "Node ID"
@@ -141,6 +180,9 @@ validate_inputs() {
     ufw|nftables) ;;
     *) fail "--firewall-provider must be ufw or nftables" ;;
   esac
+  if [[ -z "${DAEMON_DB_PASSWORD}" ]]; then
+    DAEMON_DB_PASSWORD="$(random_secret 32)"
+  fi
 }
 
 detect_distro() {
@@ -209,7 +251,7 @@ manual_dependency_error() {
 install_core_dependencies() {
   case "${PACKAGE_MANAGER}" in
     apt)
-      install_packages curl bash ca-certificates tar gzip systemd rsync git build-essential gnupg
+      install_packages curl bash ca-certificates tar gzip systemd rsync git build-essential gnupg lsb-release
       ;;
     dnf|yum)
       install_packages curl bash ca-certificates tar gzip systemd rsync git gcc-c++ make gnupg2
@@ -321,6 +363,46 @@ enable_docker() {
   run systemctl enable --now docker
 }
 
+install_mariadb() {
+  if command -v mysql >/dev/null 2>&1; then
+    return
+  fi
+  log "Installing MariaDB..."
+  case "${PACKAGE_MANAGER}" in
+    apt)
+      install_packages mariadb-server mariadb-client
+      ;;
+    dnf|yum)
+      install_packages mariadb-server mariadb
+      ;;
+    pacman)
+      install_packages mariadb
+      ;;
+  esac
+}
+
+detect_mariadb_service() {
+  if systemctl list-unit-files mariadb.service >/dev/null 2>&1; then
+    MARIADB_SERVICE="mariadb"
+  elif systemctl list-unit-files mysql.service >/dev/null 2>&1; then
+    MARIADB_SERVICE="mysql"
+  else
+    MARIADB_SERVICE="mariadb"
+  fi
+}
+
+initialize_mariadb_if_needed() {
+  if [[ "${PACKAGE_MANAGER}" == "pacman" && "${DRY_RUN}" != "true" && ! -d /var/lib/mysql/mysql ]]; then
+    run mariadb-install-db --user=mysql --basedir=/usr --datadir=/var/lib/mysql
+  fi
+}
+
+enable_mariadb() {
+  detect_mariadb_service
+  initialize_mariadb_if_needed
+  run systemctl enable --now "${MARIADB_SERVICE}.service"
+}
+
 create_users() {
   if id leviathan >/dev/null 2>&1; then
     return
@@ -334,39 +416,92 @@ create_layout() {
   run chmod 750 "${DAEMON_BASE_DIR}"
 }
 
+is_repo_root() {
+  local candidate="$1"
+  [[ -d "${candidate}/apps/daemon" && -f "${candidate}/package.json" ]]
+}
+
+prepare_source_dir() {
+  if is_repo_root "${WORKDIR}"; then
+    SOURCE_DIR="${WORKDIR}"
+    return
+  fi
+
+  TEMP_SOURCE_DIR="/tmp/leviathan-daemon-src-$$"
+  log "No local Leviathan checkout detected at ${WORKDIR}. Cloning ${REPO_URL} (${REPO_BRANCH})..."
+  run git clone --depth 1 --branch "${REPO_BRANCH}" "${REPO_URL}" "${TEMP_SOURCE_DIR}"
+  SOURCE_DIR="${TEMP_SOURCE_DIR}"
+}
+
 copy_source_and_build() {
-  [[ -d "${WORKDIR}/apps/daemon" ]] || fail "--workdir must point to the Leviathan monorepo root. Missing apps/daemon under ${WORKDIR}."
+  run mkdir -p "${INSTALL_DIR}"
   run rsync -a --delete \
     --exclude node_modules \
     --exclude dist \
-    --exclude .git \
-    "${WORKDIR}/" "${INSTALL_DIR}/"
+    "${SOURCE_DIR}/" "${INSTALL_DIR}/"
   run_shell "cd '${INSTALL_DIR}' && pnpm install && pnpm build"
+}
+
+configure_database() {
+  local db_name_escaped db_user_escaped db_password_escaped
+  db_name_escaped="$(sql_escape "${DAEMON_DB_NAME}")"
+  db_user_escaped="$(sql_escape "${DAEMON_DB_USER}")"
+  db_password_escaped="$(sql_escape "${DAEMON_DB_PASSWORD}")"
+
+  log "Configuring local daemon MariaDB database '${DAEMON_DB_NAME}'..."
+  run_shell "mysql -uroot <<SQL
+CREATE DATABASE IF NOT EXISTS \`${db_name_escaped}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS '${db_user_escaped}'@'localhost' IDENTIFIED BY '${db_password_escaped}';
+ALTER USER '${db_user_escaped}'@'localhost' IDENTIFIED BY '${db_password_escaped}';
+GRANT ALL PRIVILEGES ON \`${db_name_escaped}\`.* TO '${db_user_escaped}'@'localhost';
+FLUSH PRIVILEGES;
+SQL"
 }
 
 write_daemon_env() {
   local env_file="${INSTALL_DIR}/apps/daemon/.env"
-  run cp "${INSTALL_DIR}/apps/daemon/.env.example" "${env_file}"
-  run_shell "sed -i 's|^PANEL_URL=.*|PANEL_URL=${PANEL_URL}|' '${env_file}'"
-  run_shell "sed -i 's|^NODE_ID=.*|NODE_ID=${NODE_ID}|' '${env_file}'"
-  run_shell "sed -i 's|^BOOTSTRAP_TOKEN=.*|BOOTSTRAP_TOKEN=${BOOTSTRAP_TOKEN}|' '${env_file}'"
-  run_shell "sed -i 's|^DAEMON_BASE_DIR=.*|DAEMON_BASE_DIR=${DAEMON_BASE_DIR}|' '${env_file}'"
-  run_shell "sed -i 's|^DAEMON_PORT=.*|DAEMON_PORT=${DAEMON_PORT}|' '${env_file}'"
-  run chmod 600 "${env_file}"
+  if [[ "${DRY_RUN}" == "true" ]]; then
+    echo "[dry-run] write ${env_file}"
+    return
+  fi
+  cat >"${env_file}" <<EOF
+DAEMON_HOST=0.0.0.0
+DAEMON_PORT=${DAEMON_PORT}
+PANEL_URL=${PANEL_URL}
+NODE_ID=${NODE_ID}
+BOOTSTRAP_TOKEN=${BOOTSTRAP_TOKEN}
+DAEMON_TOKEN=
+DAEMON_BASE_DIR=${DAEMON_BASE_DIR}
+DOCKER_SOCKET_PATH=/var/run/docker.sock
+DAEMON_DB_DRIVER=mysql
+DAEMON_DB_HOST=127.0.0.1
+DAEMON_DB_PORT=3306
+DAEMON_DB_NAME=${DAEMON_DB_NAME}
+DAEMON_DB_USER=${DAEMON_DB_USER}
+DAEMON_DB_PASSWORD=${DAEMON_DB_PASSWORD}
+DAEMON_DB_NAMESPACE=leviathan
+EOF
+  chmod 600 "${env_file}"
 }
 
 write_systemd_service() {
   local service_path="/etc/systemd/system/${SERVICE_NAME}.service"
+  local update_service_path="/etc/systemd/system/${UPDATE_SERVICE_NAME}.service"
+  local update_timer_path="/etc/systemd/system/${UPDATE_TIMER_NAME}.timer"
   if [[ "${DRY_RUN}" == "true" ]]; then
     echo "[dry-run] write ${service_path}"
+    if [[ "${AUTO_UPDATE}" == "true" ]]; then
+      echo "[dry-run] write ${update_service_path}"
+      echo "[dry-run] write ${update_timer_path}"
+    fi
     return
   fi
   cat >"${service_path}" <<EOF
 [Unit]
 Description=Leviathan Daemon
-After=network-online.target docker.service
+After=network-online.target docker.service ${MARIADB_SERVICE}.service
 Wants=network-online.target
-Requires=docker.service
+Requires=docker.service ${MARIADB_SERVICE}.service
 
 [Service]
 Type=simple
@@ -381,11 +516,43 @@ LimitNOFILE=1048576
 [Install]
 WantedBy=multi-user.target
 EOF
+
+  if [[ "${AUTO_UPDATE}" == "true" ]]; then
+    cat >"${update_service_path}" <<EOF
+[Unit]
+Description=Leviathan Daemon Automatic Update
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/env bash ${INSTALL_DIR}/installers/daemon/update.sh
+User=root
+EOF
+
+    cat >"${update_timer_path}" <<EOF
+[Unit]
+Description=Daily Leviathan Daemon Update Check
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=30m
+Persistent=true
+Unit=${UPDATE_SERVICE_NAME}.service
+
+[Install]
+WantedBy=timers.target
+EOF
+  fi
 }
 
 validate_panel_reachable() {
   log "Validating panel reachability..."
-  run_shell "curl -fsS --max-time 10 '${PANEL_URL%/}/health' >/dev/null"
+  run_shell "curl -fsS --retry 5 --retry-delay 2 --max-time 10 '${PANEL_URL%/}/health' >/dev/null"
+}
+
+validate_mariadb() {
+  log "Validating MariaDB..."
+  run_shell "mysql -uroot -e 'SELECT 1;' >/dev/null"
 }
 
 validate_docker() {
@@ -401,6 +568,17 @@ validate_service() {
 start_service() {
   run systemctl daemon-reload
   run systemctl enable --now "${SERVICE_NAME}.service"
+  if [[ "${AUTO_UPDATE}" == "true" ]]; then
+    run systemctl enable --now "${UPDATE_TIMER_NAME}.timer"
+  fi
+}
+
+print_troubleshooting() {
+  echo
+  echo "Troubleshooting commands:"
+  echo "  Daemon logs:   journalctl -u ${SERVICE_NAME}.service -n 100 --no-pager"
+  echo "  MariaDB logs:  journalctl -u ${MARIADB_SERVICE}.service -n 100 --no-pager"
+  echo "  Docker:        systemctl status docker --no-pager"
 }
 
 print_success() {
@@ -409,16 +587,25 @@ print_success() {
   echo "Daemon status: systemctl status ${SERVICE_NAME}.service --no-pager"
   echo "Node ID: ${NODE_ID}"
   echo "Panel URL: ${PANEL_URL}"
+  echo "MariaDB: systemctl status ${MARIADB_SERVICE}.service --no-pager"
   echo "Service name: ${SERVICE_NAME}.service"
   echo
+  echo "One-line installer:"
+  echo "  bash <(curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel/${REPO_BRANCH}/installers/daemon/install.sh) --panel-url ${PANEL_URL} --node-id ${NODE_ID} --bootstrap-token <bootstrap-token>"
+  echo
   echo "Useful commands:"
-  echo "  Logs:      journalctl -u ${SERVICE_NAME}.service -f"
-  echo "  Restart:   systemctl restart ${SERVICE_NAME}.service"
-  echo "  Update:    bash ${INSTALL_DIR}/installers/daemon/update.sh"
-  echo "  Uninstall: bash ${INSTALL_DIR}/installers/daemon/uninstall.sh"
+  echo "  Logs:        journalctl -u ${SERVICE_NAME}.service -f"
+  echo "  Restart:     systemctl restart ${SERVICE_NAME}.service"
+  echo "  Update:      bash ${INSTALL_DIR}/installers/daemon/update.sh"
+  echo "  Uninstall:   bash ${INSTALL_DIR}/installers/daemon/uninstall.sh"
+  if [[ "${AUTO_UPDATE}" == "true" ]]; then
+    echo "  Update timer: systemctl status ${UPDATE_TIMER_NAME}.timer --no-pager"
+  fi
 }
 
 main() {
+  trap 'print_troubleshooting' ERR
+  trap 'cleanup_temp_source' EXIT
   parse_args "$@"
   validate_inputs
   need_root
@@ -431,14 +618,19 @@ main() {
   install_pnpm
   install_docker
   enable_docker
+  install_mariadb
+  enable_mariadb
+  validate_mariadb
   install_optional_dependencies
   create_users
   create_layout
+  prepare_source_dir
   copy_source_and_build
+  configure_database
   write_daemon_env
   write_systemd_service
-  start_service
   validate_panel_reachable
+  start_service
   validate_docker
   validate_service
   print_success

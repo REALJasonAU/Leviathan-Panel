@@ -112,6 +112,9 @@
   let currentView: View = "overview";
   let serverSection: ServerSection = "console";
   let currentToken: string | null = null;
+  let authIdentifier = "";
+  let authPassword = "";
+  let authError = "";
   let me: SessionResponse | null = null;
   let dashboard: DashboardSummary | null = null;
   let nodes: NodeRecord[] = [];
@@ -397,6 +400,19 @@
       return parsed.error?.message ?? raw;
     } catch {
       return raw;
+    }
+  };
+
+  const signInLocal = async () => {
+    authError = "";
+    try {
+      await session.signInLocal(authIdentifier, authPassword);
+      authPassword = "";
+    } catch (signInError) {
+      authError =
+        signInError instanceof Error
+          ? parseApiError(signInError.message)
+          : "Sign in failed";
     }
   };
 
@@ -1410,8 +1426,31 @@
         A darker control plane for nodes, daemons, live console, files, backups,
         schedules, and infrastructure operations.
       </p>
+      <div class="auth-form">
+        <label>
+          <span>Username or Email</span>
+          <input bind:value={authIdentifier} placeholder="admin" autocomplete="username" />
+        </label>
+        <label>
+          <span>Password</span>
+          <input
+            bind:value={authPassword}
+            type="password"
+            placeholder="Enter your Leviathan password"
+            autocomplete="current-password"
+            on:keydown={(event) => {
+              if (event.key === "Enter") {
+                void signInLocal();
+              }
+            }}
+          />
+        </label>
+        {#if authError}
+          <p class="inline-error">{authError}</p>
+        {/if}
+      </div>
       <div class="auth-actions">
-        <button on:click={() => session.signInGoogle()}>Sign in with Google</button>
+        <button on:click={() => void signInLocal()}>Sign in to Leviathan</button>
         <button class="ghost" on:click={() => session.useMockAdmin()}>Use Mock Admin</button>
         <button class="ghost" on:click={() => session.useMockUser()}>Use Mock User</button>
       </div>
@@ -1438,7 +1477,7 @@
     <svelte:fragment slot="header">
       <TopHeader
         title="Leviathan Operations"
-        subtitle="Premium infrastructure controls with Firebase-backed identity and daemon runtime telemetry."
+        subtitle="Premium infrastructure controls with local account sessions and daemon runtime telemetry."
         breadcrumbs={activeTopBreadcrumbs}
         bind:searchValue={topSearchValue}
         on:search={(event) => void handleHeaderSearch(event.detail)}
@@ -2595,7 +2634,7 @@
       {/if}
 
       {#if currentView === "users"}
-        <Card title="Users" subtitle="Firebase-backed identities and role assignment">
+        <Card title="Users" subtitle="Local identities and role assignment">
           <div class="table-surface">
             <div class="table-scroll">
               <table class="lv-table">

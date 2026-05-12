@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import multipart from "@fastify/multipart";
@@ -6,6 +7,7 @@ import sensible from "@fastify/sensible";
 import websocket from "@fastify/websocket";
 
 import { config } from "./config.js";
+import { closeDatabase } from "./lib/db.js";
 import { asAppError } from "./lib/errors.js";
 import { startTaskScheduler } from "./lib/scheduler.js";
 import { loadPluginDirectory } from "./lib/plugin-loader.js";
@@ -55,6 +57,7 @@ export const buildApp = async () => {
     },
     credentials: true,
   });
+  await app.register(cookie);
   await app.register(sensible);
   await app.register(rateLimit, {
     max: config.RATE_LIMIT_MAX,
@@ -100,6 +103,9 @@ export const buildApp = async () => {
   await registerIntegrationRoutes(app);
   await loadPluginDirectory(app);
   startTaskScheduler(app);
+  app.addHook("onClose", async () => {
+    await closeDatabase();
+  });
 
   return app;
 };

@@ -1,6 +1,4 @@
-import { firestore } from "./lib/firebase.js";
 import { store } from "./lib/store.js";
-import { nowIso } from "./lib/utils.js";
 
 const seed = async () => {
   await store
@@ -47,26 +45,19 @@ const seed = async () => {
     appName: "Leviathan",
   });
 
-  const adminUid = process.env.ADMIN_UID;
+  const adminUsername = process.env.ADMIN_USERNAME;
   const adminEmail = process.env.ADMIN_EMAIL;
-  if (adminUid) {
-    await firestore
-      .collection("users")
-      .doc(adminUid)
-      .set(
-        {
-          uid: adminUid,
-          email: adminEmail,
-          displayName: adminEmail ?? "Initial Admin",
-          roleIds: ["admin"],
-          serverIds: [],
-          twoFactorRequired: false,
-          disabled: false,
-          createdAt: nowIso(),
-          updatedAt: nowIso(),
-        },
-        { merge: true },
-      );
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  if (adminUsername && adminEmail && adminPassword) {
+    await store
+      .createLocalUser({
+        username: adminUsername,
+        email: adminEmail,
+        password: adminPassword,
+        roleIds: ["admin"],
+        displayName: adminUsername,
+      })
+      .catch(() => undefined);
   }
 
   console.log("Seed complete.");

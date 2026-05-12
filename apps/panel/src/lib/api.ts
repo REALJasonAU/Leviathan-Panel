@@ -25,9 +25,10 @@ import type {
 } from "@voltan/shared";
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:4000";
+export const SESSION_SENTINEL = "__cookie_session__";
 
 type RequestOptions = {
-  token: string;
+  token?: string | null;
   method?: string;
   body?: unknown;
 };
@@ -36,12 +37,17 @@ const request = async <T>(
   path: string,
   options: RequestOptions,
 ): Promise<T> => {
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+  };
+  if (options.token && options.token !== SESSION_SENTINEL) {
+    headers.Authorization = `Bearer ${options.token}`;
+  }
+
   const response = await fetch(`${apiBaseUrl}${path}`, {
     method: options.method ?? "GET",
-    headers: {
-      Authorization: `Bearer ${options.token}`,
-      "content-type": "application/json",
-    },
+    headers,
+    credentials: "include",
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
 
@@ -58,9 +64,14 @@ const request = async <T>(
   return response.json() as Promise<T>;
 };
 
-const requestBlob = async (path: string, token: string) => {
+const requestBlob = async (path: string, token?: string | null) => {
+  const headers: Record<string, string> = {};
+  if (token && token !== SESSION_SENTINEL) {
+    headers.Authorization = `Bearer ${token}`;
+  }
   const response = await fetch(`${apiBaseUrl}${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers,
+    credentials: "include",
   });
   if (!response.ok) {
     throw new Error(await response.text());
@@ -68,10 +79,19 @@ const requestBlob = async (path: string, token: string) => {
   return response.blob();
 };
 
-const uploadForm = async <T>(path: string, token: string, body: FormData) => {
+const uploadForm = async <T>(
+  path: string,
+  token: string | null | undefined,
+  body: FormData,
+) => {
+  const headers: Record<string, string> = {};
+  if (token && token !== SESSION_SENTINEL) {
+    headers.Authorization = `Bearer ${token}`;
+  }
   const response = await fetch(`${apiBaseUrl}${path}`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
+    headers,
+    credentials: "include",
     body,
   });
   if (!response.ok) {
@@ -80,8 +100,13 @@ const uploadForm = async <T>(path: string, token: string, body: FormData) => {
   return response.json() as Promise<T>;
 };
 
-export const consoleSocketUrl = (token: string, serverId: string) =>
-  `${apiBaseUrl.replace(/^http/, "ws")}/v1/servers/${serverId}/console/socket?token=${encodeURIComponent(token)}`;
+export const consoleSocketUrl = (token: string, serverId: string) => {
+  const base = `${apiBaseUrl.replace(/^http/, "ws")}/v1/servers/${serverId}/console/socket`;
+  if (!token || token === SESSION_SENTINEL) {
+    return base;
+  }
+  return `${base}?token=${encodeURIComponent(token)}`;
+};
 
 export type SessionResponse = {
   user: {
@@ -104,6 +129,18 @@ export type FileContentResponse = {
 };
 
 export const api = {
+  auth: {
+    login: (identifier: string, password: string) =>
+      request<SessionResponse>("/v1/auth/login", {
+        method: "POST",
+        body: { identifier, password },
+      }),
+    logout: () =>
+      request<{ ok: boolean }>("/v1/auth/logout", {
+        method: "POST",
+      }),
+    me: () => request<SessionResponse>("/v1/auth/me", {}),
+  },
   me: (token: string) => request<SessionResponse>("/v1/me", { token }),
   dashboard: (token: string) =>
     request<DashboardSummary>("/v1/dashboard", { token }),

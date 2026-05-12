@@ -1,77 +1,52 @@
 # Security Checklist
 
-Use this checklist before calling a Leviathan deployment production-ready.
+## Core Runtime
 
-## Identity And Authentication
+- `MOCK_AUTH=false` in production
+- `MOCK_DATA=false` in production
+- `VITE_USE_MOCK_AUTH=false` in production
+- panel and API are behind HTTPS
+- session cookies are `Secure` in production deployments
+- only intended panel origins are allowed by CORS
 
-- Firebase Authentication is configured for the real project, not mock mode.
-- `MOCK_AUTH=false` and `MOCK_DATA=false` in every production API environment.
-- Panel Firebase config points at the correct production project.
-- Google sign-in is restricted to the intended tenant or email policy where required.
+## Accounts And Sessions
+
+- first admin password is strong and unique
+- local passwords are never stored plaintext
+- API keys are only shown once and stored hashed
+- revoked or expired API keys are pruned or monitored
+- sensitive admin actions generate audit records
+
+## Panel MariaDB
+
+- MariaDB runs locally or on a protected private network path
+- the Leviathan panel DB user is scoped to its database only
+- root MariaDB access is limited
+- database backups are tested
+
+## Daemon MariaDB
+
+- each daemon host has its own separate local database
+- daemon DB credentials are not shared with the panel
+- daemon-local backups and operational records are monitored as needed
 
 ## Secrets
 
-- `SECRET_ENCRYPTION_KEY` is set to a strong production value.
-- Cloudflare tokens are encrypted at rest.
-- S3 secrets are encrypted at rest.
-- Webhook signing secrets are encrypted at rest.
-- Billing secrets are encrypted at rest.
-- Daemon bootstrap and live tokens are not exposed in panel responses except one-time values where intended.
-- Logs and audit logs are checked to confirm secret redaction is working.
+- Cloudflare, S3, webhook, billing, and similar secrets remain encrypted at rest
+- secrets are redacted from logs, audit records, and panel payloads
+- one-time secret reveal flows are used where intended
+- `.env` files are permissioned tightly
 
-## API Keys
+## Daemon And Node Security
 
-- API keys use hashed storage only.
-- Operators understand that raw API keys are shown once at creation time.
-- Expiry and revocation workflows are documented for admins.
-- Scopes are limited to the minimum required permissions.
-- Legacy `vtk_` keys are rotated to the Leviathan `lvk_` prefix where practical.
+- bootstrap tokens are treated as sensitive and short-lived
+- daemon tokens are rotated when needed
+- Docker access is restricted to trusted node operators
+- reverse proxy, Cloudflare, firewall, and SFTP features are staged before broad use
 
-## Network And Transport
+## Update / Recovery
 
-- TLS termination is enabled in front of the panel/API host.
-- Reverse proxy rules expose only intended routes.
-- Daemon nodes can reach the panel/API host over HTTPS.
-- Firewall defaults are reviewed before enabling live apply.
-- Cloudflare tokens have least-privilege access for DNS and tunnel configuration.
-
-## Queue And Background Work
-
-- Production uses Redis/BullMQ rather than local queue mode.
-- Redis is restricted to trusted network paths.
-- Failed-job visibility is enabled through the Jobs page or logs.
-
-## Audit And Rate Limiting
-
-- Audit logs are reviewed for:
-  - API key creation/revocation
-  - daemon token rotation
-  - backup restore/delete
-  - file upload/delete
-  - console commands
-  - SFTP credential rotation/revoke
-  - Cloudflare route sync/delete
-  - firewall dry-run/apply
-  - plugin install/enable/disable
-  - daemon update actions
-- Sensitive routes are covered by Fastify rate limits.
-- Production logs are retained long enough to investigate incidents.
-
-## Firestore And Firebase
-
-- Firestore rules remain narrow and do not allow broad direct client writes to secrets or operational collections.
-- Admin SDK credentials are stored only on the API host.
-- Firebase service account permissions are limited to what Leviathan needs.
-
-## Daemon Nodes
-
-- Docker is installed from a trusted source and validated with `docker info`.
-- Daemon systemd service is enabled and stable.
-- Node base directories under `/var/lib/leviathan` have reviewed permissions.
-- Daemon update staging directory is writable only to trusted operators.
-
-## Still Partial
-
-- Full production SFTP network serving still needs operator-specific node hardening.
-- Root-level firewall enforcement should be staged and verified before broad rollout.
-- Multi-distro support outside Ubuntu/Debian is still best-effort until smoke-tested in CI.
+- auto-update timers are monitored rather than assumed
+- panel and daemon update logs are reviewed after rollout
+- restore drills exist for panel DB, daemon DB, and server data
+- rollback steps are documented for daemon updates and infrastructure changes

@@ -1,6 +1,6 @@
 # Leviathan
 
-Leviathan is a self-hosted server orchestration platform for game servers and Docker-based workloads. It is designed as a modern alternative to the classic panel-plus-daemon model, with a faster Svelte-based panel, a TypeScript control plane, a lightweight node daemon, and Firebase-backed identity plus data management.
+Leviathan is a self-hosted server orchestration platform for game servers and Docker-based workloads. It combines a Svelte control panel, a Fastify API, and a lightweight node daemon into a modern alternative to the classic panel-plus-daemon model, with built-in local accounts, MariaDB-backed state, secure cookie sessions, and Docker-native runtime control.
 
 This repository is organized as a monorepo:
 
@@ -9,33 +9,25 @@ This repository is organized as a monorepo:
 - `apps/daemon`: lightweight node daemon for Docker orchestration
 - `packages/shared`: shared contracts, schemas, permissions, and env tooling
 - `installers`: one-command install, update, and uninstall scripts
-- `docs`: architecture, schema, auth flow, and deployment docs
-- `examples`: Firebase, template, daemon, and Cloudflare examples
+- `docs`: architecture, schema, auth flow, deployment, and operations docs
+- `examples`: template, daemon, and infrastructure examples
 
 ## Highlights
 
-- Firebase Authentication with Google sign-in support
-- Firestore-first data layer with a mock adapter for local development
+- Local Leviathan accounts stored in MariaDB
+- Secure server-side session cookies for the panel
+- Scoped API keys for automation and integrations
 - Real-time panel-to-daemon command channel over authenticated WebSockets
 - Docker-native server lifecycle management
 - Live console streaming and command input
-- File browsing, editing, archive, extract, and upload flows
-- Local backup create, restore, delete, and download flows
-- Local/S3-compatible backup targets with daemon-side S3 upload, download, restore, and delete
-- Queue-backed scheduled task execution with lock/retry metadata
-- Optional BullMQ/Redis production queue adapter
-- Admin users, roles, audit logs, API keys, settings, and webhook management
-- Hashed API-key authentication with scoped permissions, expiry, revocation, and last-used tracking
-- Server sub-users with server-scoped permissions
-- Alert records, metric threshold evaluation, signed webhooks, Caddy config generation, and UFW rule generation
-- Cloudflare route automation, signed daemon update manifests, trusted plugin manifests, and billing webhook validation interfaces
-- Short-lived daemon transfer IDs for byte-stream file and local backup transfers
-- AES-256-GCM local secret encryption adapter for sensitive provider credentials
-- Trusted runtime plugin loader for admin-installed plugins
+- File browsing, editing, archive, extract, upload, and streamed download flows
+- Local and S3-compatible backup providers
+- Queue-backed scheduled task execution with local and BullMQ/Redis options
+- Admin users, roles, audit logs, settings, webhooks, plugins, and daemon update controls
 - Template-based provisioning with environment variable metadata and `.env.example` import
-- Multi-node architecture with token rotation and audit logging hooks
-- Installer scripts for Ubuntu/Debian panel and daemon deployments, with best-effort paths for Fedora, Rocky Linux, AlmaLinux, CentOS Stream, and Arch Linux
-- Leviathan Command Deck panel redesign with a unified admin/user shell, premium abyss palette, safer destructive workflows, and reusable Svelte UI primitives
+- Multi-node architecture with bootstrap-token registration and daemon-local operational SQL state
+- One-line panel and daemon installers with MariaDB auto-provisioning
+- Leviathan Command Deck UI with a unified admin/user shell and abyss infrastructure theme
 
 ## Quick Start
 
@@ -45,15 +37,13 @@ This repository is organized as a monorepo:
 pnpm install
 ```
 
-2. Copy example environment files:
+2. Copy environment files:
 
 ```bash
 cp apps/api/.env.example apps/api/.env
 cp apps/panel/.env.example apps/panel/.env
 cp apps/daemon/.env.example apps/daemon/.env
 ```
-
-The API now accepts both `localhost` and `127.0.0.1` panel origins for local development. If you use a custom dev host, add it to `PANEL_EXTRA_ORIGINS` in `apps/api/.env`.
 
 3. Start the workspace:
 
@@ -75,16 +65,35 @@ pnpm typecheck
 pnpm test
 ```
 
+## One-Line Install
+
+Panel:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel/main/installers/panel/install.sh)
+```
+
+Daemon:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel/main/installers/daemon/install.sh) \
+  --panel-url https://panel.example.com \
+  --node-id node_123 \
+  --bootstrap-token nd_bootstrap_xxx
+```
+
+The panel installer prompts for the panel origin plus the first admin username, email, and password. Both installers provision local MariaDB by default. Ubuntu and Debian are the fully targeted paths; Fedora, Rocky Linux, AlmaLinux, CentOS Stream, and Arch Linux remain best-effort until distro-specific smoke tests are completed.
+
 ## Documentation
 
 - [Architecture](./docs/architecture.md)
-- [Firestore Schema](./docs/firestore-schema.md)
+- [Database Schema](./docs/database-schema.md)
 - [Authentication Flow](./docs/auth-flow.md)
 - [Panel-to-Daemon Protocol](./docs/panel-daemon-protocol.md)
 - [Deployment Guide](./docs/deployment.md)
 - [Panel Installer](./docs/panel-installer.md)
 - [Daemon Installer](./docs/daemon-installer.md)
-- [Firebase Setup](./docs/firebase-setup.md)
+- [MariaDB And Local Auth Setup](./docs/database-setup.md)
 - [Local Development](./docs/local-development.md)
 - [Security Checklist](./docs/security-checklist.md)
 - [Release And Update Operations](./docs/updates.md)
@@ -109,33 +118,30 @@ pnpm build
 pnpm test:e2e
 ```
 
-The E2E suite runs against mock auth/data and installs Chromium through Playwright on Linux runners.
+The E2E suite runs against local mock auth/data unless a real test environment is wired in.
 
 ## Current Scope
 
-The repository now includes working core flows for panel auth wiring, dashboard pages, template and server management APIs, environment validation/import, daemon bootstrap and registration, Docker lifecycle control, console streaming, file operations, short-lived daemon byte-stream transfers, multipart browser uploads, binary browser downloads, local/S3 backups, queue-backed scheduled tasks, optional BullMQ queueing, metrics retention and alerts, scoped API keys, sub-users, encrypted provider secrets, Cloudflare route automation, signed update manifests, trusted runtime plugin loading, billing webhook validation, admin management, and installer scaffolding.
+The repository includes working core flows for:
 
-Some advanced items from the roadmap, such as full live migration, full embedded SFTP network serving, package-specific daemon service replacement, S3-to-browser backpressure streaming without staging, and root-level firewall enforcement by default, are represented with safe extension points and documentation rather than claimed as fully completed production modules.
+- local-account auth and session wiring
+- dashboard pages and admin tooling
+- template and server management APIs
+- environment validation and import
+- daemon bootstrap and registration
+- Docker lifecycle control
+- console streaming
+- file operations and byte-stream transfers
+- local and S3 backup providers
+- queue-backed scheduled tasks
+- metrics retention and alerts
+- scoped API keys
+- sub-users
+- encrypted provider secrets
+- Cloudflare route automation
+- signed update manifests
+- trusted runtime plugin loading
+- billing webhook validation interfaces
+- installer automation
 
-## Installer Support
-
-The panel installer and daemon installer both detect `/etc/os-release` and common package managers. Ubuntu and Debian are the fully targeted paths. Fedora, Rocky Linux, AlmaLinux, CentOS Stream, and Arch Linux are best-effort until distro-specific smoke tests are added.
-
-Panel:
-
-```bash
-sudo bash installers/panel/install.sh \
-  --panel-origin https://panel.example.com \
-  --api-base-url https://panel.example.com \
-  --non-interactive
-```
-
-Daemon:
-
-```bash
-sudo bash installers/daemon/install.sh \
-  --panel-url https://panel.example.com \
-  --node-id node_123 \
-  --bootstrap-token nd_bootstrap_xxx \
-  --non-interactive
-```
+Some advanced roadmap items remain partial rather than fully production-complete, including full embedded SFTP network serving, package-specific daemon replacement, and broad distro smoke testing outside Ubuntu/Debian.

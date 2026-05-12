@@ -23,6 +23,13 @@ const ConfigSchema = z.object({
     .transform((value) => value === "true"),
   DAEMON_UPDATE_TARGET_PATH: z.string().optional(),
   DAEMON_UPDATE_STAGING_DIR: z.string().default("/var/lib/leviathan/updates"),
+  DAEMON_DB_DRIVER: z.enum(["memory", "mysql"]).default("memory"),
+  DAEMON_DB_HOST: z.string().default("127.0.0.1"),
+  DAEMON_DB_PORT: z.coerce.number().int().positive().default(3306),
+  DAEMON_DB_NAME: z.string().default("leviathan_daemon"),
+  DAEMON_DB_USER: z.string().default("leviathan"),
+  DAEMON_DB_PASSWORD: z.string().default("leviathan"),
+  DAEMON_DB_NAMESPACE: z.string().default("daemon"),
 });
 
 export const config = ConfigSchema.parse(process.env);

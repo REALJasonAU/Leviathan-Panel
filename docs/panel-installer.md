@@ -1,6 +1,6 @@
 # Panel Installer
 
-The Leviathan panel installer provisions the API and Svelte panel on a Linux host with as few manual steps as practical. It detects `/etc/os-release`, chooses a supported package manager, installs safe dependencies, installs Docker when needed, writes API and panel environment files from the shipped examples, creates systemd services, and validates the API, panel, and Docker runtime before declaring success.
+The Leviathan panel installer provisions the API and Svelte panel on a Linux host with as few manual steps as practical. It detects `/etc/os-release`, chooses a supported package manager, installs safe dependencies, installs Docker when needed, installs and enables local MariaDB, seeds the first Leviathan admin account, writes API and panel environment files, creates systemd services plus a daily update timer, and validates the API, panel, MariaDB, and Docker runtime before declaring success.
 
 ## Supported Distro Matrix
 
@@ -17,6 +17,12 @@ The Leviathan panel installer provisions the API and Svelte panel on a Linux hos
 Only Ubuntu and Debian should be treated as fully supported release-candidate targets until distro-specific CI smoke tests are added.
 
 ## One-Command Install
+
+Recommended raw GitHub one-line install:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel/main/installers/panel/install.sh)
+```
 
 Run from the Leviathan monorepo root on the panel/API host:
 
@@ -46,11 +52,20 @@ bash installers/panel/install.sh \
 
 ```text
 --install-dir PATH         Install directory, default /opt/leviathan
---workdir PATH             Source checkout to copy from, default current directory
+--workdir PATH             Source checkout to copy from; if missing, the installer clones from GitHub
+--repo-url URL             Leviathan Git repository
+--repo-branch NAME         Git branch or tag to install
 --api-port PORT            API listen port, default 4000
 --panel-port PORT          Panel listen port, default 4173
 --panel-origin URL         Public panel origin used for API CORS
 --api-base-url URL         Public API base URL baked into panel assets
+--db-name NAME             Local panel MariaDB database name
+--db-user USER             Local panel MariaDB user
+--db-password PASS         Local panel MariaDB password
+--admin-username NAME      First admin username
+--admin-email EMAIL        First admin email
+--admin-password PASS      First admin password
+--disable-auto-update      Skip installation of the daily update timer
 --skip-docker-install      Fail if Docker is missing instead of installing it
 --non-interactive          Fail instead of prompting for missing values
 --dry-run                  Print actions without changing the system
@@ -60,17 +75,23 @@ bash installers/panel/install.sh \
 
 - Required tools: `curl`, `bash`, `ca-certificates`, `tar`, `gzip`, `systemd`, `rsync`, `git`, Node.js 20+, and `pnpm`.
 - Docker: installed automatically unless `--skip-docker-install` is set, then enabled and started with systemd.
+- MariaDB: installed automatically, enabled with systemd, and provisioned with a local Leviathan database and DB user.
+- Source handling: uses `--workdir` when it points at the monorepo; otherwise clones the configured repo/branch from GitHub.
 - Build and copy: copies the monorepo into `/opt/leviathan`, runs `pnpm install`, and builds every workspace package.
 - Environment files:
-  - `apps/api/.env` is generated from `apps/api/.env.example`
-  - `apps/panel/.env` is generated from `apps/panel/.env.example`
-  - `PANEL_ORIGIN` and `VITE_API_BASE_URL` are baked into those generated files
+  - `apps/api/.env` is generated with SQL/session settings and production-safe mock flags disabled
+  - `apps/panel/.env` is generated with the configured public API base URL
+- Admin bootstrap:
+  - prompts for first admin username, email, and password unless supplied as flags
+  - seeds the account through `pnpm --filter @voltan/api seed`
 - Services:
   - `leviathan-api.service`
   - `leviathan-panel.service`
+  - `leviathan-panel-update.timer` by default
 - Runtime validation:
   - `GET /health` on the API
   - `GET /` on the panel preview service
+  - `mysql -uroot -e "SELECT 1"`
   - `docker info`
   - `systemctl is-active` for both services
 
@@ -113,5 +134,6 @@ systemctl restart leviathan-panel.service
 
 - API logs: `journalctl -u leviathan-api.service -n 100 --no-pager`
 - Panel logs: `journalctl -u leviathan-panel.service -n 100 --no-pager`
+- MariaDB logs: `journalctl -u mariadb.service -n 100 --no-pager`
 - Docker: `systemctl status docker --no-pager`
 - If the panel cannot reach the API from a browser, re-check `--api-base-url` and your reverse proxy routing for `/v1` and `/health`.

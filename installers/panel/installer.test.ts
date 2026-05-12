@@ -34,12 +34,26 @@ describe("panel installer scripts", () => {
       "--dry-run",
       "--non-interactive",
       "--skip-docker-install",
+      "--repo-url",
+      "--repo-branch",
       "--api-port",
       "--panel-port",
       "--panel-origin",
+      "--admin-username",
+      "--admin-email",
+      "--admin-password",
+      "--db-name",
+      "--db-user",
+      "--db-password",
+      "--disable-auto-update",
       "validate_api_service",
       "validate_panel_service",
       "systemctl enable --now docker",
+      "mariadb",
+      "mysql -uroot",
+      "pnpm --filter @voltan/api seed",
+      "git clone --depth 1 --branch",
+      "curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel",
     ]) {
       expect(install).toContain(token);
     }
@@ -53,6 +67,8 @@ describe("panel installer scripts", () => {
 
   it("supports update and uninstall dry-run flows", () => {
     expect(update).toContain("--dry-run");
+    expect(update).toContain("git fetch --all --prune");
+    expect(update).toContain("git pull --ff-only");
     expect(update).toMatch(
       /systemctl restart "\$\{API_SERVICE_NAME\}\.service"/,
     );
@@ -60,6 +76,7 @@ describe("panel installer scripts", () => {
       /systemctl restart "\$\{PANEL_SERVICE_NAME\}\.service"/,
     );
     expect(uninstall).toContain("--dry-run");
+    expect(uninstall).toContain("UPDATE_TIMER_NAME");
     expect(uninstall).toMatch(
       /systemctl disable --now "\$\{API_SERVICE_NAME\}\.service"/,
     );

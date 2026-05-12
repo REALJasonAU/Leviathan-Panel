@@ -3,6 +3,7 @@ import { pipeline } from "node:stream/promises";
 
 import { config } from "./config.js";
 import { DockerManager } from "./docker.js";
+import { createDaemonStateStore } from "./local-state.js";
 import { MetricsCollector } from "./metrics.js";
 import { PanelClient } from "./panel-client.js";
 import { TransferManager } from "./transfers.js";
@@ -12,7 +13,24 @@ const start = async () => {
   const workspace = new WorkspaceManager(config.DAEMON_BASE_DIR);
   const docker = new DockerManager(config.DOCKER_SOCKET_PATH, workspace);
   const metrics = new MetricsCollector();
-  const transfers = new TransferManager();
+  const stateStore = await createDaemonStateStore(
+    config.DAEMON_DB_DRIVER === "memory"
+      ? {
+          driver: "memory",
+          namespace: config.DAEMON_DB_NAMESPACE,
+        }
+      : {
+          driver: "mysql",
+          host: config.DAEMON_DB_HOST,
+          port: config.DAEMON_DB_PORT,
+          user: config.DAEMON_DB_USER,
+          password: config.DAEMON_DB_PASSWORD,
+          database: config.DAEMON_DB_NAME,
+          namespace: config.DAEMON_DB_NAMESPACE,
+        },
+  );
+  const transfers = new TransferManager(stateStore);
+  await transfers.hydrate();
   const panelClient = new PanelClient(docker, workspace, metrics, transfers);
 
   const app = Fastify({
@@ -72,7 +90,10 @@ const start = async () => {
   });
 
   const cleanupInterval = setInterval(() => transfers.cleanup(), 60_000);
-  app.addHook("onClose", async () => clearInterval(cleanupInterval));
+  app.addHook("onClose", async () => {
+    clearInterval(cleanupInterval);
+    await stateStore.close();
+  });
 
   await panelClient.start();
   await app.listen({

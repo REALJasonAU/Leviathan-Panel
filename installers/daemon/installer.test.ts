@@ -34,6 +34,12 @@ describe("daemon installer scripts", () => {
       "--dry-run",
       "--skip-docker-install",
       "--non-interactive",
+      "--repo-url",
+      "--repo-branch",
+      "--db-name",
+      "--db-user",
+      "--db-password",
+      "--disable-auto-update",
       "--enable-cloudflare",
       "--enable-firewall",
       "--enable-sftp-openssh",
@@ -43,6 +49,10 @@ describe("daemon installer scripts", () => {
       "ufw",
       "nftables",
       "openssh-server",
+      "mariadb",
+      "mysql -uroot",
+      "git clone --depth 1 --branch",
+      "curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel",
     ]) {
       expect(install).toContain(token);
     }
@@ -52,6 +62,7 @@ describe("daemon installer scripts", () => {
     for (const token of [
       "validate_panel_reachable",
       "validate_docker",
+      "validate_mariadb",
       "validate_service",
       "/health",
       "useradd --system",
@@ -66,9 +77,12 @@ describe("daemon installer scripts", () => {
 
   it("keeps update and uninstall scripts distro-safe and dry-run aware", () => {
     expect(update).toContain("--dry-run");
+    expect(update).toContain("git fetch --all --prune");
+    expect(update).toContain("git pull --ff-only");
     expect(update).toMatch(/systemctl restart "\$\{SERVICE_NAME\}\.service"/);
     expect(update).toContain("pnpm build");
     expect(uninstall).toContain("--dry-run");
+    expect(uninstall).toContain("UPDATE_TIMER_NAME");
     expect(uninstall).toMatch(
       /systemctl disable --now "\$\{SERVICE_NAME\}\.service"/,
     );

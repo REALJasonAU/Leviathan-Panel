@@ -25,10 +25,19 @@ const ConfigSchema = z.object({
     .string()
     .optional()
     .transform((value) => value === "true"),
-  FIREBASE_PROJECT_ID: z.string().optional(),
-  FIREBASE_CLIENT_EMAIL: z.string().optional(),
-  FIREBASE_PRIVATE_KEY: z.string().optional(),
-  FIREBASE_STORAGE_BUCKET: z.string().optional(),
+  DB_DRIVER: z.enum(["memory", "mysql"]).default("memory"),
+  DB_HOST: z.string().default("127.0.0.1"),
+  DB_PORT: z.coerce.number().int().positive().default(3306),
+  DB_NAME: z.string().default("leviathan_panel"),
+  DB_USER: z.string().default("leviathan"),
+  DB_PASSWORD: z.string().default("leviathan"),
+  DB_NAMESPACE: z.string().default("panel"),
+  SESSION_COOKIE_NAME: z.string().default("leviathan_session"),
+  SESSION_TTL_HOURS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(24 * 7),
   QUEUE_DRIVER: z.enum(["local", "bullmq"]).default("local"),
   REDIS_URL: z.string().optional(),
   RATE_LIMIT_MAX: z.coerce.number().positive().default(100),

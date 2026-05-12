@@ -133,4 +133,58 @@ describe("api integration", () => {
 
     await app.close();
   });
+
+  it("logs in with local credentials and resolves the cookie-backed session", async () => {
+    process.env.MOCK_AUTH = "false";
+    process.env.MOCK_DATA = "false";
+    process.env.DB_DRIVER = "memory";
+    process.env.SESSION_COOKIE_NAME = "leviathan_session";
+    vi.resetModules();
+
+    const [{ buildApp }, { store }] = await Promise.all([
+      import("./app.js"),
+      import("./lib/store.js"),
+    ]);
+    const app = await buildApp();
+
+    await store.createLocalUser({
+      username: "admin",
+      email: "admin@example.com",
+      password: "abyss-admin-password",
+      roleIds: ["admin"],
+      displayName: "Admin",
+    });
+
+    const login = await app.inject({
+      method: "POST",
+      url: "/v1/auth/login",
+      payload: {
+        identifier: "admin",
+        password: "abyss-admin-password",
+      },
+    });
+
+    expect(login.statusCode).toBe(200);
+    const cookie = login.cookies.find(
+      (entry) => entry.name === "leviathan_session",
+    );
+    expect(cookie?.value).toBeTruthy();
+
+    const me = await app.inject({
+      method: "GET",
+      url: "/v1/me",
+      cookies: {
+        leviathan_session: cookie?.value ?? "",
+      },
+    });
+
+    expect(me.statusCode).toBe(200);
+    const payload = me.json() as {
+      user: { email?: string; displayName: string };
+    };
+    expect(payload.user.email).toBe("admin@example.com");
+    expect(payload.user.displayName).toBe("Admin");
+
+    await app.close();
+  });
 });

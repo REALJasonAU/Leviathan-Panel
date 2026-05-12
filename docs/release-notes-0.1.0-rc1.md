@@ -5,7 +5,7 @@ Leviathan 0.1.0 RC1 is the first release-candidate milestone for the rebranded p
 ## Included
 
 - Leviathan panel rebrand and abyss-themed UI refresh
-- Firebase auth and Firestore-backed control-plane foundation
+- Local-account auth and MariaDB-backed control-plane foundation
 - Docker-managed server lifecycle scaffolding
 - File operations and daemon transfer streaming paths
 - Local and S3 backup support
@@ -23,7 +23,7 @@ Leviathan 0.1.0 RC1 is the first release-candidate milestone for the rebranded p
 ## Upgrade Guidance
 
 1. Back up environment files.
-2. Back up Firestore or export control-plane data.
+2. Back up the panel MariaDB database or export control-plane data.
 3. Update panel/API first.
 4. Validate panel health.
 5. Update daemon nodes in maintenance windows.

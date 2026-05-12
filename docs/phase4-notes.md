@@ -115,8 +115,8 @@ Billing events map to provision, suspend, unsuspend, terminate, update-limits, o
 
 - Keep `MOCK_AUTH=false` and `MOCK_DATA=false` in production.
 - Restrict CORS with `PANEL_ORIGIN`.
-- Use Firebase Admin SDK only on the API.
-- Do not grant client write access to operational Firestore collections.
+- Keep Leviathan secrets encrypted server-side and out of frontend env files.
+- Use SQL-backed control-plane writes for operational collections.
 - Rotate API keys and daemon tokens periodically.
 - Keep Cloudflare, S3, webhook, Stripe, WHMCS, and daemon secrets out of frontend env files.
 - Enable HTTPS at the reverse proxy.

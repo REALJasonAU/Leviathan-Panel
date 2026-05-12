@@ -1,16 +1,11 @@
 import { writable } from "svelte/store";
-import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
 
-import {
-  firebaseAuth,
-  firebaseClientEnabled,
-  googleProvider,
-} from "../firebase";
+import { api, SESSION_SENTINEL } from "../api";
 
 type SessionState = {
   ready: boolean;
   token: string | null;
-  mode: "firebase" | "mock";
+  mode: "session" | "mock";
   displayName: string | null;
 };
 
@@ -20,14 +15,14 @@ const createSessionStore = () => {
   const { subscribe, set } = writable<SessionState>({
     ready: false,
     token: null,
-    mode: useMockAuth || !firebaseClientEnabled ? "mock" : "firebase",
+    mode: useMockAuth ? "mock" : "session",
     displayName: null,
   });
 
   return {
     subscribe,
-    init() {
-      if (useMockAuth || !firebaseClientEnabled || !firebaseAuth) {
+    async init() {
+      if (useMockAuth) {
         set({
           ready: true,
           token: null,
@@ -37,39 +32,40 @@ const createSessionStore = () => {
         return;
       }
 
-      onAuthStateChanged(firebaseAuth, async (user) => {
-        if (!user) {
-          set({
-            ready: true,
-            token: null,
-            mode: "firebase",
-            displayName: null,
-          });
-          return;
-        }
-
+      try {
+        const me = await api.auth.me();
         set({
           ready: true,
-          token: await user.getIdToken(),
-          mode: "firebase",
-          displayName: user.displayName,
+          token: SESSION_SENTINEL,
+          mode: "session",
+          displayName: me.user.displayName,
         });
+      } catch {
+        set({
+          ready: true,
+          token: null,
+          mode: "session",
+          displayName: null,
+        });
+      }
+    },
+    async signInLocal(identifier: string, password: string) {
+      const me = await api.auth.login(identifier, password);
+      set({
+        ready: true,
+        token: SESSION_SENTINEL,
+        mode: "session",
+        displayName: me.user.displayName,
       });
     },
-    async signInGoogle() {
-      if (!firebaseAuth || !googleProvider) {
-        return;
-      }
-      await signInWithPopup(firebaseAuth, googleProvider);
-    },
     async signOut() {
-      if (firebaseAuth) {
-        await signOut(firebaseAuth);
+      if (!useMockAuth) {
+        await api.auth.logout();
       }
       set({
         ready: true,
         token: null,
-        mode: useMockAuth || !firebaseClientEnabled ? "mock" : "firebase",
+        mode: useMockAuth ? "mock" : "session",
         displayName: null,
       });
     },

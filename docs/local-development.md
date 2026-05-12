@@ -1,45 +1,70 @@
 # Local Development
 
-## Mock mode
-
-Mock mode is intended for local development only.
-
-Set:
-
-- `apps/api/.env`
-  - `MOCK_AUTH=true`
-  - `MOCK_DATA=true`
-  - `PANEL_ORIGIN=http://localhost:5173`
-  - `PANEL_EXTRA_ORIGINS=http://127.0.0.1:4173`
-- `apps/panel/.env`
-  - `VITE_USE_MOCK_AUTH=true`
-
-Then run:
+## Fastest Path
 
 ```bash
 pnpm install
+cp apps/api/.env.example apps/api/.env
+cp apps/panel/.env.example apps/panel/.env
+cp apps/daemon/.env.example apps/daemon/.env
 pnpm dev
 ```
 
-Use the mock sign-in buttons in the panel:
+This starts the API, panel, and daemon in local development mode.
 
-- `Use Mock Admin`
-- `Use Mock User`
+## Default Local Mode
 
-Leviathan accepts both `http://localhost:*` and `http://127.0.0.1:*` during local development so the panel can be opened from either address without tripping API CORS.
+The example env files default to mock/local-friendly settings:
 
-## What works in mock mode
+- `MOCK_AUTH=true`
+- `MOCK_DATA=true`
+- `DB_DRIVER=memory`
+- `DAEMON_DB_DRIVER=memory`
+- `VITE_USE_MOCK_AUTH=true`
 
-- Panel auth flow
-- Node and server CRUD
-- Template import and validation
-- Console/file/backup/task API paths when a daemon is connected
-- Admin roles, audit logs, settings, API keys, and webhooks stored in memory
+This is the intended path for quick UI and workflow work.
 
-## What mock mode does not represent faithfully
+## Local Real SQL Mode
 
-- Real Firebase Authentication
-- Real Firestore persistence
-- Linux Docker runtime behaviour
-- Real SFTP provisioning
-- Real reverse proxy or Cloudflare management
+If you want to test the MariaDB-backed auth/storage path locally:
+
+1. Install local MariaDB.
+2. Create a panel database and database user.
+3. Create a daemon database and database user.
+4. Update:
+   - `apps/api/.env`
+   - `apps/daemon/.env`
+   - `apps/panel/.env`
+5. Set:
+
+```env
+MOCK_AUTH=false
+MOCK_DATA=false
+DB_DRIVER=mysql
+DAEMON_DB_DRIVER=mysql
+VITE_USE_MOCK_AUTH=false
+```
+
+6. Seed an admin account:
+
+```bash
+ADMIN_USERNAME=owner \
+ADMIN_EMAIL=owner@example.com \
+ADMIN_PASSWORD='strong-password' \
+pnpm --filter @voltan/api seed
+```
+
+## Useful Commands
+
+```bash
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm build
+pnpm test:e2e
+```
+
+## Notes
+
+- Local browser development supports both `localhost` and `127.0.0.1` panel origins by default.
+- Mock mode should stay local-only and should not be used in production installs.

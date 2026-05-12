@@ -681,10 +681,17 @@ main() {
   write_api_env
   write_panel_env
   seed_admin_user
+  log "Writing systemd services..."
   write_systemd_services
+  log "Starting services and update timer..."
   start_services
+  log "Waiting for MariaDB to respond..."
+  validate_mariadb
+  log "Waiting for API health check..."
   validate_api_service
+  log "Waiting for panel health check..."
   validate_panel_service
+  log "Validating Docker..."
   validate_docker
   print_success
 }

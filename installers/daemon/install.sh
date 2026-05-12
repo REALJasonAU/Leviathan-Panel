@@ -638,10 +638,15 @@ main() {
   copy_source_and_build
   configure_database
   write_daemon_env
+  log "Writing systemd service..."
   write_systemd_service
+  log "Checking panel reachability..."
   validate_panel_reachable
+  log "Starting daemon service and update timer..."
   start_service
+  log "Validating Docker..."
   validate_docker
+  log "Waiting for daemon service startup..."
   validate_service
   print_success
 }

@@ -557,7 +557,17 @@ EOF
 
 validate_panel_reachable() {
   log "Validating panel reachability..."
-  run_shell "curl -fsS --retry 5 --retry-delay 2 --max-time 10 '${PANEL_URL%/}/health' >/dev/null"
+  local attempt=1
+  while [[ "${attempt}" -le 30 ]]; do
+    if run_shell "curl -fsS --max-time 5 '${PANEL_URL%/}/health' >/dev/null"; then
+      return 0
+    fi
+    log "Panel not ready yet (attempt ${attempt}/30); waiting 2s..."
+    sleep 2
+    attempt=$((attempt + 1))
+  done
+
+  fail "Panel health check did not pass. See: journalctl -u ${SERVICE_NAME}.service -n 100 --no-pager"
 }
 
 validate_mariadb() {

@@ -603,16 +603,39 @@ validate_mariadb() {
   run_shell "mysql -uroot -e 'SELECT 1;' >/dev/null"
 }
 
+wait_for_http() {
+  local label="$1"
+  local url="$2"
+  local attempts="${3:-30}"
+  local delay_seconds="${4:-2}"
+
+  local attempt=1
+  while [[ "${attempt}" -le "${attempts}" ]]; do
+    if run_shell "curl -fsS --max-time 5 '${url}' >/dev/null"; then
+      return 0
+    fi
+    log "${label} not ready yet (attempt ${attempt}/${attempts}); waiting ${delay_seconds}s..."
+    sleep "${delay_seconds}"
+    attempt=$((attempt + 1))
+  done
+
+  return 1
+}
+
 validate_api_service() {
   log "Validating API service startup..."
   run systemctl is-active --quiet "${API_SERVICE_NAME}.service"
-  run_shell "curl -fsS --retry 5 --retry-delay 2 --max-time 10 'http://127.0.0.1:${API_PORT}/health' >/dev/null"
+  wait_for_http "API" "http://127.0.0.1:${API_PORT}/health" 30 2 || {
+    fail "API health check did not pass. See: journalctl -u ${API_SERVICE_NAME}.service -n 100 --no-pager"
+  }
 }
 
 validate_panel_service() {
   log "Validating panel service startup..."
   run systemctl is-active --quiet "${PANEL_SERVICE_NAME}.service"
-  run_shell "curl -fsS --retry 5 --retry-delay 2 --max-time 10 'http://127.0.0.1:${PANEL_PORT}' >/dev/null"
+  wait_for_http "Panel" "http://127.0.0.1:${PANEL_PORT}" 30 2 || {
+    fail "Panel health check did not pass. See: journalctl -u ${PANEL_SERVICE_NAME}.service -n 100 --no-pager"
+  }
 }
 
 validate_docker() {

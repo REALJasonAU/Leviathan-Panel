@@ -1,22 +1,50 @@
+import type { FastifyInstance } from "fastify";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("api integration", () => {
   beforeEach(() => {
-    process.env.MOCK_AUTH = "true";
-    process.env.MOCK_DATA = "true";
+    process.env.DB_DRIVER = "memory";
     process.env.PANEL_ORIGIN = "http://localhost:5173";
     vi.resetModules();
   });
 
-  it("creates a node in mock mode", async () => {
+  const loginAsAdmin = async (app: FastifyInstance) => {
+    const { store } = await import("./lib/store.js");
+    await store.createLocalUser({
+      username: "admin",
+      email: "admin@example.com",
+      password: "abyss-admin-password",
+      roleIds: ["admin"],
+      displayName: "Admin",
+    });
+
+    const login = await app.inject({
+      method: "POST",
+      url: "/v1/auth/login",
+      payload: {
+        identifier: "admin",
+        password: "abyss-admin-password",
+      },
+    });
+
+    expect(login.statusCode).toBe(200);
+    const cookie = login.cookies.find(
+      (entry) => entry.name === "leviathan_session",
+    );
+    expect(cookie?.value).toBeTruthy();
+    return cookie?.value ?? "";
+  };
+
+  it("creates a node with a real admin session", async () => {
     const { buildApp } = await import("./app.js");
     const app = await buildApp();
+    const sessionCookie = await loginAsAdmin(app);
 
     const response = await app.inject({
       method: "POST",
       url: "/v1/nodes",
-      headers: {
-        authorization: "Bearer dev-admin",
+      cookies: {
+        leviathan_session: sessionCookie,
       },
       payload: {
         name: "Test Node",
@@ -41,12 +69,13 @@ describe("api integration", () => {
   it("authenticates scoped API keys and supports revocation", async () => {
     const { buildApp } = await import("./app.js");
     const app = await buildApp();
+    const sessionCookie = await loginAsAdmin(app);
 
     const createResponse = await app.inject({
       method: "POST",
       url: "/v1/api-keys",
-      headers: {
-        authorization: "Bearer dev-admin",
+      cookies: {
+        leviathan_session: sessionCookie,
       },
       payload: {
         name: "Integration key",
@@ -84,8 +113,8 @@ describe("api integration", () => {
     const revokeResponse = await app.inject({
       method: "DELETE",
       url: `/v1/api-keys/${created.record.id}`,
-      headers: {
-        authorization: "Bearer dev-admin",
+      cookies: {
+        leviathan_session: sessionCookie,
       },
     });
     expect(revokeResponse.statusCode).toBe(200);
@@ -135,9 +164,6 @@ describe("api integration", () => {
   });
 
   it("logs in with local credentials and resolves the cookie-backed session", async () => {
-    process.env.MOCK_AUTH = "false";
-    process.env.MOCK_DATA = "false";
-    process.env.DB_DRIVER = "memory";
     process.env.SESSION_COOKIE_NAME = "leviathan_session";
     vi.resetModules();
 

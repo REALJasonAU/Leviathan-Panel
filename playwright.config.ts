@@ -11,10 +11,13 @@ export default defineConfig({
     {
       command: "pnpm --filter @voltan/api dev",
       url: "http://localhost:4000/health",
-      reuseExistingServer: false,
+      reuseExistingServer: true,
       env: {
-        MOCK_AUTH: "true",
-        MOCK_DATA: "true",
+        DB_DRIVER: "memory",
+        BOOTSTRAP_ADMIN_ON_START: "true",
+        ADMIN_USERNAME: "e2e-admin",
+        ADMIN_EMAIL: "e2e-admin@example.test",
+        ADMIN_PASSWORD: "e2e-password",
         PANEL_ORIGIN: "http://localhost:5173",
         RATE_LIMIT_MAX: "1000",
       },
@@ -22,9 +25,8 @@ export default defineConfig({
     {
       command: "pnpm --filter @voltan/panel dev -- --host 127.0.0.1",
       url: "http://localhost:5173",
-      reuseExistingServer: false,
+      reuseExistingServer: true,
       env: {
-        VITE_USE_MOCK_AUTH: "true",
         VITE_API_BASE_URL: "http://localhost:4000",
       },
     },

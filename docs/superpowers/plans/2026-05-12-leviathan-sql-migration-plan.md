@@ -176,7 +176,7 @@
 
 - [ ] **Step 1: Write failing browser tests for password login, session persistence, and logout**
 - [ ] **Step 2: Replace Firebase client store with session-backed auth store**
-- [ ] **Step 3: Replace Google sign-in UI with local login form while keeping mock login gated to dev mode**
+- [ ] **Step 3: Replace Google sign-in UI with local login form while keeping local bootstrap login gated to dev mode**
 - [ ] **Step 4: Run E2E auth tests**
 - [ ] **Step 5: Commit**
 

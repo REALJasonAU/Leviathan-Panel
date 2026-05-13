@@ -6,6 +6,7 @@ API_SERVICE_NAME="${API_SERVICE_NAME:-leviathan-api}"
 PANEL_SERVICE_NAME="${PANEL_SERVICE_NAME:-leviathan-panel}"
 UPDATE_SERVICE_NAME="${UPDATE_SERVICE_NAME:-leviathan-panel-update}"
 UPDATE_TIMER_NAME="${UPDATE_TIMER_NAME:-leviathan-panel-update}"
+INSTALL_MARKER="${INSTALL_MARKER:-${INSTALL_DIR}/.leviathan-install.json}"
 KEEP_DATA=false
 DRY_RUN=false
 
@@ -56,6 +57,7 @@ run rm -f "/etc/systemd/system/${API_SERVICE_NAME}.service"
 run rm -f "/etc/systemd/system/${PANEL_SERVICE_NAME}.service"
 run rm -f "/etc/systemd/system/${UPDATE_SERVICE_NAME}.service"
 run rm -f "/etc/systemd/system/${UPDATE_TIMER_NAME}.timer"
+run rm -f "${INSTALL_MARKER}"
 run systemctl daemon-reload
 
 if [[ "${KEEP_DATA}" == "false" ]]; then

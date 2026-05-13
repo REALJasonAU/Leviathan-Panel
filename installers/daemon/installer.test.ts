@@ -54,6 +54,7 @@ describe("daemon installer scripts", () => {
       "git clone --depth 1 --branch",
       "curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel/refs/heads/master/installers/daemon/install.sh",
       "LeviathanInstallerSecret",
+      ".leviathan-install.json",
       "|| true",
     ]) {
       expect(install).toContain(token);
@@ -85,6 +86,7 @@ describe("daemon installer scripts", () => {
     expect(update).toContain("pnpm build");
     expect(uninstall).toContain("--dry-run");
     expect(uninstall).toContain("UPDATE_TIMER_NAME");
+    expect(uninstall).toContain(".leviathan-install.json");
     expect(uninstall).toMatch(
       /systemctl disable --now "\$\{SERVICE_NAME\}\.service"/,
     );

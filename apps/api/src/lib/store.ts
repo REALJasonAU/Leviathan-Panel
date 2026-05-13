@@ -181,44 +181,6 @@ const userRole = RoleSchema.parse({
   updatedAt: nowIso(),
 });
 
-const starterTemplate = TemplateSchema.parse({
-  id: "tpl_minecraft_java",
-  name: "Minecraft Java",
-  category: "game",
-  description: "Vanilla or Paper-ready Java server template.",
-  dockerImages: [
-    "itzg/minecraft-server:latest",
-    "ghcr.io/papermc/paper:latest",
-  ],
-  startupCommand: "java -Xms128M -Xmx{{SERVER_MEMORY}}M -jar server.jar nogui",
-  environmentDefinitions: [
-    {
-      key: "EULA",
-      displayName: "Accept EULA",
-      description: "Must be TRUE before the server can start.",
-      defaultValue: "TRUE",
-      required: true,
-      secret: false,
-      readonly: false,
-      allowedValues: ["TRUE", "FALSE"],
-    },
-    {
-      key: "VERSION",
-      displayName: "Minecraft Version",
-      description: "Minecraft image version tag.",
-      defaultValue: "1.20.6",
-      required: true,
-      secret: false,
-      readonly: false,
-      validationRule: "^[0-9.]+$",
-      allowedValues: [],
-    },
-  ],
-  importedEnvExample: "EULA=TRUE\nVERSION=1.20.6\n",
-  createdAt: nowIso(),
-  updatedAt: nowIso(),
-});
-
 const defaultSettings = SettingsSchema.parse({
   id: "global",
   appName: "Leviathan",
@@ -288,7 +250,7 @@ export type AuthContext = {
   user: UserRecord;
   roles: RoleRecord[];
   permissions: string[];
-  authType?: "session" | "mock" | "apiKey";
+  authType?: "session" | "apiKey";
   apiKeyId?: string;
 };
 
@@ -508,6 +470,8 @@ export interface Store {
   listAuditLogs(limit?: number): Promise<AuditLogRecord[]>;
 }
 
+// Legacy fallback retained for development-time reference.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 class MemoryStore implements Store {
   protected readonly users = new Map<string, UserRecord>();
   protected readonly roles = new Map<string, RoleRecord>([
@@ -516,9 +480,7 @@ class MemoryStore implements Store {
     [userRole.id, userRole],
   ]);
   protected readonly nodes = new Map<string, NodeRecord>();
-  protected readonly templates = new Map<string, TemplateRecord>([
-    [starterTemplate.id, starterTemplate],
-  ]);
+  protected readonly templates = new Map<string, TemplateRecord>();
   protected readonly servers = new Map<string, ServerRecord>();
   protected readonly allocations = new Map<string, AllocationRecord>();
   protected readonly backups = new Map<string, BackupRecord>();
@@ -764,11 +726,6 @@ class MemoryStore implements Store {
       await this.persistRole(adminRole);
       await this.persistRole(staffRole);
       await this.persistRole(userRole);
-    }
-
-    if (!this.templates.size) {
-      this.templates.set(starterTemplate.id, starterTemplate);
-      await this.persistTemplate(starterTemplate);
     }
 
     if (!settingsSnapshot.exists) {
@@ -2192,7 +2149,7 @@ class SqlStore implements Store {
     await ref.set(payload, { merge: true });
     const roles = await this.getRolesByIds(payload.roleIds);
     const permissions = [...new Set(roles.flatMap((role) => role.permissions))];
-    return { user: payload, roles, permissions, authType: "mock" };
+    return { user: payload, roles, permissions, authType: "session" };
   }
 
   async getRolesByIds(roleIds: string[]) {
@@ -3373,26 +3330,17 @@ class SqlStore implements Store {
 }
 
 const createStore = async (): Promise<Store> => {
-  if (config.MOCK_DATA || !databaseEnabled) {
-    const memory = new MemoryStore();
-    return memory;
+  if (!databaseEnabled) {
+    throw new Error(
+      "Document database is not available. Set DB_DRIVER to memory or mysql before starting Leviathan.",
+    );
   }
-
   const sql = new SqlStore();
-  const [roles, templates] = await Promise.all([
-    sql.listRoles(),
-    sql.listTemplates(),
-  ]);
+  const roles = await sql.listRoles();
   if (roles.length === 0) {
     await firestore!.collection("roles").doc(adminRole.id).set(adminRole);
     await firestore!.collection("roles").doc(staffRole.id).set(staffRole);
     await firestore!.collection("roles").doc(userRole.id).set(userRole);
-  }
-  if (templates.length === 0) {
-    await firestore!
-      .collection("templates")
-      .doc(starterTemplate.id)
-      .set(starterTemplate);
   }
   await sql.getSettings();
   return sql;

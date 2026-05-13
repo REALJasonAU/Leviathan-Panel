@@ -23,7 +23,7 @@ Response:
   "daemonToken": "nd_live_...",
   "node": {
     "id": "node_123",
-    "name": "Sydney-01"
+    "name": "node-123"
   }
 }
 ```

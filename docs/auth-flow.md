@@ -41,10 +41,16 @@ Node daemons never use browser sessions.
 
 ## Local Development
 
-For local development, the API can run in mock auth mode. In that mode:
+For local development, seed a local admin account and use the same cookie-backed login flow as production.
 
-- `Authorization: Bearer dev-admin` maps to an admin user.
-- `Authorization: Bearer dev-user` maps to a standard user.
-- The panel can also use `VITE_USE_MOCK_AUTH=true`.
+Example:
 
-This keeps local iteration fast while reserving real SQL-backed auth for production and staging installs.
+```bash
+ADMIN_USERNAME=local-admin \
+ADMIN_EMAIL=local-admin@example.test \
+ADMIN_PASSWORD='change-me-now' \
+BOOTSTRAP_ADMIN_ON_START=true \
+pnpm dev
+```
+
+This keeps local iteration close to production while still making it easy to bootstrap a new workspace.

@@ -14,13 +14,10 @@ This starts the API, panel, and daemon in local development mode.
 
 ## Default Local Mode
 
-The example env files default to mock/local-friendly settings:
+The example env files default to local-friendly settings:
 
-- `MOCK_AUTH=true`
-- `MOCK_DATA=true`
 - `DB_DRIVER=memory`
 - `DAEMON_DB_DRIVER=memory`
-- `VITE_USE_MOCK_AUTH=true`
 
 This is the intended path for quick UI and workflow work.
 
@@ -38,21 +35,21 @@ If you want to test the MariaDB-backed auth/storage path locally:
 5. Set:
 
 ```env
-MOCK_AUTH=false
-MOCK_DATA=false
 DB_DRIVER=mysql
 DAEMON_DB_DRIVER=mysql
-VITE_USE_MOCK_AUTH=false
 ```
 
-6. Seed an admin account:
+6. Seed an admin account or bootstrap one on start with explicit credentials:
 
 ```bash
-ADMIN_USERNAME=owner \
-ADMIN_EMAIL=owner@example.com \
-ADMIN_PASSWORD='strong-password' \
+ADMIN_USERNAME=local-admin \
+ADMIN_EMAIL=local-admin@example.test \
+ADMIN_PASSWORD='change-me-now' \
+BOOTSTRAP_ADMIN_ON_START=true \
 pnpm --filter @voltan/api seed
 ```
+
+Leviathan no longer creates an implicit demo admin user. If you are using the memory-backed local dev server, provide explicit credentials as shown above or log in with the account created by the installer.
 
 ## Useful Commands
 
@@ -67,4 +64,4 @@ pnpm test:e2e
 ## Notes
 
 - Local browser development supports both `localhost` and `127.0.0.1` panel origins by default.
-- Mock mode should stay local-only and should not be used in production installs.
+- Local development should use the real login flow with a seeded or bootstrapped admin account.

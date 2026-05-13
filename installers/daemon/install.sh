@@ -5,6 +5,7 @@ SERVICE_NAME="${SERVICE_NAME:-leviathan-daemon}"
 UPDATE_SERVICE_NAME="${UPDATE_SERVICE_NAME:-leviathan-daemon-update}"
 UPDATE_TIMER_NAME="${UPDATE_TIMER_NAME:-leviathan-daemon-update}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/leviathan}"
+INSTALL_MARKER="${INSTALL_MARKER:-${INSTALL_DIR}/.leviathan-install.json}"
 WORKDIR="${WORKDIR:-$(pwd)}"
 SOURCE_DIR=""
 TEMP_SOURCE_DIR=""
@@ -103,6 +104,14 @@ cleanup_temp_source() {
   fi
 }
 
+is_already_installed() {
+  if [[ -f "${INSTALL_MARKER}" && -f "/etc/systemd/system/${SERVICE_NAME}.service" ]]; then
+    return 0
+  fi
+
+  [[ -d "${INSTALL_DIR}" && -f "/etc/systemd/system/${SERVICE_NAME}.service" ]]
+}
+
 need_root() {
   if [[ "${DRY_RUN}" == "true" ]]; then
     return
@@ -194,6 +203,24 @@ validate_inputs() {
     DAEMON_DB_PASSWORD="$(random_secret 32)"
   fi
   log "Install configuration collected. Continuing with dependency and MariaDB setup..."
+}
+
+write_install_marker() {
+  local marker_file="${INSTALL_MARKER}"
+  if [[ "${DRY_RUN}" == "true" ]]; then
+    echo "[dry-run] write ${marker_file}"
+    return
+  fi
+  cat >"${marker_file}" <<EOF
+{
+  "product": "Leviathan Daemon",
+  "installDir": "${INSTALL_DIR}",
+  "repoUrl": "${REPO_URL}",
+  "repoBranch": "${REPO_BRANCH}",
+  "installedAt": "$(date --iso-8601=seconds)"
+}
+EOF
+  chmod 600 "${marker_file}"
 }
 
 detect_distro() {
@@ -627,8 +654,11 @@ main() {
   trap 'print_troubleshooting' ERR
   trap 'cleanup_temp_source' EXIT
   parse_args "$@"
-  validate_inputs
   need_root
+  if [[ "${DRY_RUN}" != "true" && is_already_installed ]]; then
+    fail "Leviathan daemon is already installed at ${INSTALL_DIR}. Run update.sh or uninstall.sh instead."
+  fi
+  validate_inputs
   detect_distro
   detect_package_manager
   assert_supported_distro
@@ -658,6 +688,7 @@ main() {
   validate_docker
   log "Waiting for daemon service startup..."
   validate_service
+  write_install_marker
   print_success
 }
 

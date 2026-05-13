@@ -11,8 +11,8 @@ These logical collections are stored in the panel database:
 ```json
 {
   "id": "usr_123",
-  "email": "owner@example.com",
-  "displayName": "Owner",
+  "email": "local-admin@example.test",
+  "displayName": "Admin User",
   "roleIds": ["admin"],
   "serverIds": ["srv_123"],
   "twoFactorRequired": false,
@@ -28,9 +28,9 @@ These logical collections are stored in the panel database:
 ```json
 {
   "userId": "usr_123",
-  "username": "owner",
-  "usernameLower": "owner",
-  "emailLower": "owner@example.com",
+  "username": "local-admin",
+  "usernameLower": "local-admin",
+  "emailLower": "local-admin@example.test",
   "passwordHash": "scrypt$...",
   "createdAt": "timestamp",
   "updatedAt": "timestamp"
@@ -66,11 +66,11 @@ These logical collections are stored in the panel database:
 ```json
 {
   "id": "srv_123",
-  "name": "Survival EU",
+  "name": "Example Server",
   "ownerId": "usr_123",
   "nodeId": "node_123",
-  "templateId": "tpl_minecraft_java",
-  "dockerImage": "itzg/minecraft-server:latest",
+  "templateId": "tpl_example_game",
+  "dockerImage": "example/game-server:latest",
   "status": "offline",
   "suspended": false,
   "allocations": [{ "ip": "203.0.113.10", "port": 25565, "primary": true }],
@@ -97,8 +97,8 @@ These logical collections are stored in the panel database:
 ```json
 {
   "id": "node_123",
-  "name": "Sydney-01",
-  "region": "ap-southeast-2",
+  "name": "Example Node",
+  "region": "example-region",
   "publicAddress": "203.0.113.30",
   "status": "online",
   "maintenanceMode": false,

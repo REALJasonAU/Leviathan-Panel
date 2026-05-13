@@ -79,7 +79,7 @@ bash installers/panel/install.sh \
 - Source handling: uses `--workdir` when it points at the monorepo; otherwise clones the configured repo/branch from GitHub.
 - Build and copy: copies the monorepo into `/opt/leviathan`, runs `pnpm install`, and builds every workspace package.
 - Environment files:
-  - `apps/api/.env` is generated with SQL/session settings and production-safe mock flags disabled
+  - `apps/api/.env` is generated with SQL/session settings
   - `apps/panel/.env` is generated with the configured public API base URL
 - Admin bootstrap:
   - prompts for first admin username, email, and password unless supplied as flags

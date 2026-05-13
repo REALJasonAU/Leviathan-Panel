@@ -1,15 +1,20 @@
 import { expect, test, type Page } from "@playwright/test";
 
-const loginAsMockAdmin = async (page: Page) => {
+const adminIdentifier = "e2e-admin";
+const adminPassword = "e2e-password";
+
+const loginAsAdmin = async (page: Page) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "Use Mock Admin" }).click();
+  await page.getByLabel("Username or Email").fill(adminIdentifier);
+  await page.getByLabel("Password").fill(adminPassword);
+  await page.getByRole("button", { name: "Sign in to Leviathan" }).click();
   await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
 };
 
-test("mock admin can load dashboard and see Leviathan navigation", async ({
+test("admin can load dashboard and see Leviathan navigation", async ({
   page,
 }) => {
-  await loginAsMockAdmin(page);
+  await loginAsAdmin(page);
   await expect(page.locator(".sidebar-nav__brand strong")).toHaveText(
     "Leviathan",
   );
@@ -19,19 +24,24 @@ test("mock admin can load dashboard and see Leviathan navigation", async ({
   await expect(page.locator('a[href="#plugins"]').first()).toBeVisible();
 });
 
-test("mock admin can create a node, parse env metadata, and provision a server", async ({
+test("admin can create a node, parse env metadata, and provision a server", async ({
   page,
 }) => {
   const serverName = `Release Fleet ${Date.now()}`;
   const nodeName = `Node ${Date.now()}`;
 
-  await loginAsMockAdmin(page);
+  await loginAsAdmin(page);
 
   await page.locator('a[href="#nodes"]').first().click();
   await expect(page.getByRole("heading", { name: "Nodes" })).toBeVisible();
   const createNodeCard = page.locator("#create-node-surface");
   await createNodeCard.getByLabel("Name").fill(nodeName);
+  await createNodeCard.getByLabel("Region").fill("local");
   await createNodeCard.getByLabel("Public Address").fill("203.0.113.44");
+  await createNodeCard
+    .getByLabel("Panel Base URL")
+    .fill("http://localhost:4000");
+  await createNodeCard.getByLabel("Capabilities").fill("docker,backups");
   await createNodeCard.getByRole("button", { name: "Create Node" }).click();
   await expect(
     page.getByRole("dialog", {
@@ -49,13 +59,29 @@ test("mock admin can create a node, parse env metadata, and provision a server",
   ).toBeVisible();
 
   await page.locator('a[href="#templates"]').first().click();
+  const envImportTextarea = page.locator("textarea").first();
+  await envImportTextarea.fill("APP_PORT=25565\nRCON_PASSWORD=\n");
+  await expect(envImportTextarea).toHaveValue(/APP_PORT/);
   await page.getByRole("button", { name: "Parse Import" }).click();
   await expect(page.getByText("APP_PORT")).toBeVisible();
+  const createTemplateCard = page.locator("#create-template-surface");
+  await createTemplateCard.getByLabel("ID").fill("tpl_release_fleet");
+  await createTemplateCard.getByLabel("Name").fill("Release Fleet Template");
+  await createTemplateCard.getByLabel("Category").fill("docker");
+  await createTemplateCard
+    .getByLabel("Description")
+    .fill("Template for release fleet workloads");
+  await createTemplateCard.getByLabel("Docker Images").fill("node:20-alpine");
+  await createTemplateCard.getByLabel("Startup Command").fill("npm start");
+  await createTemplateCard
+    .getByRole("button", { name: "Save Template" })
+    .click();
+  await expect(page.getByText("Release Fleet Template")).toBeVisible();
 
-  await page.locator('a[href="#servers"]').first().click();
-  const createServerCard = page.locator("section.card").filter({
-    has: page.getByRole("heading", { name: "Create Server" }),
-  });
+  await page.locator('.sidebar-nav a[href="#servers"]').first().click();
+  await expect(page).toHaveURL(/#servers/);
+  const createServerCard = page.locator("#create-server-surface");
+  await expect(createServerCard).toBeVisible({ timeout: 10000 });
   await expect(createServerCard.getByLabel("Template")).not.toHaveValue("");
   await expect(createServerCard.getByLabel("Node")).not.toHaveValue("");
   await createServerCard.getByLabel("Name").fill(serverName);
@@ -67,23 +93,30 @@ test("mock admin can create a node, parse env metadata, and provision a server",
   await expect(page.getByText(serverName).first()).toBeVisible();
 });
 
-test("mock admin can create an API key and dry-run a Cloudflare route", async ({
+test("admin can create an API key and dry-run a Cloudflare route", async ({
   page,
 }) => {
   const routeHostname = `play-${Date.now()}.example.com`;
 
-  await loginAsMockAdmin(page);
+  await loginAsAdmin(page);
 
-  await page.locator('a[href="#settings"]').first().click();
-  await page.getByLabel("Cloudflare Account ID").fill("acct_test");
-  await page.getByLabel("Cloudflare Zone ID").fill("zone_test");
-  await page.getByLabel("Cloudflare Tunnel ID").fill("tunnel_test");
-  await page.getByLabel("Cloudflare API Token").fill("token_test");
+  await page.locator('.sidebar-nav a[href="#settings"]').first().click();
+  await expect(page).toHaveURL(/#settings/);
+  const settingsCard = page.locator("#settings-surface");
+  await expect(settingsCard).toBeVisible({ timeout: 10000 });
+  await settingsCard.getByLabel("Cloudflare Account ID").fill("acct_test");
+  await settingsCard.getByLabel("Cloudflare Zone ID").fill("zone_test");
+  await settingsCard.getByLabel("Cloudflare Tunnel ID").fill("tunnel_test");
+  await settingsCard.getByLabel("Cloudflare API Token").fill("token_test");
   await page.getByRole("button", { name: "Save Settings" }).click();
 
-  await page.locator('a[href="#api-keys"]').first().click();
-  await page
-    .locator("#create-api-key-surface")
+  await page.locator('.sidebar-nav a[href="#api-keys"]').first().click();
+  const createApiKeyCard = page.locator("#create-api-key-surface");
+  await createApiKeyCard.getByLabel("API Key Name").fill("E2E Key");
+  await expect(createApiKeyCard.getByLabel("API Key Name")).toHaveValue(
+    "E2E Key",
+  );
+  await createApiKeyCard
     .getByRole("button", { name: "Create API Key" })
     .click();
   await expect(
@@ -97,7 +130,7 @@ test("mock admin can create an API key and dry-run a Cloudflare route", async ({
     .getByRole("button", { name: "Close", exact: true })
     .click();
 
-  await page.locator('a[href="#cloudflare"]').first().click();
+  await page.locator('.sidebar-nav a[href="#cloudflare"]').first().click();
   await page.getByLabel("Hostname").fill(routeHostname);
   await page.getByLabel("Tunnel ID").fill("tunnel_test");
   await page.getByLabel("Zone ID").fill("zone_test");

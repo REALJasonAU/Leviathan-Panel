@@ -17,14 +17,6 @@ const ConfigSchema = z.object({
             .filter(Boolean)
         : [],
     ),
-  MOCK_AUTH: z
-    .string()
-    .optional()
-    .transform((value) => value === "true"),
-  MOCK_DATA: z
-    .string()
-    .optional()
-    .transform((value) => value === "true"),
   DB_DRIVER: z.enum(["memory", "mysql"]).default("memory"),
   DB_HOST: z.string().default("127.0.0.1"),
   DB_PORT: z.coerce.number().int().positive().default(3306),

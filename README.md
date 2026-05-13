@@ -118,7 +118,7 @@ pnpm build
 pnpm test:e2e
 ```
 
-The E2E suite runs against local mock auth/data unless a real test environment is wired in.
+The E2E suite runs against a local MariaDB-backed bootstrap admin unless a dedicated test environment is wired in.
 
 ## Current Scope
 

@@ -55,6 +55,7 @@ describe("panel installer scripts", () => {
       "git clone --depth 1 --branch",
       "curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel/refs/heads/master/installers/panel/install.sh",
       "LeviathanInstallerSecret",
+      ".leviathan-install.json",
       "|| true",
     ]) {
       expect(install).toContain(token);
@@ -79,6 +80,7 @@ describe("panel installer scripts", () => {
     );
     expect(uninstall).toContain("--dry-run");
     expect(uninstall).toContain("UPDATE_TIMER_NAME");
+    expect(uninstall).toContain(".leviathan-install.json");
     expect(uninstall).toMatch(
       /systemctl disable --now "\$\{API_SERVICE_NAME\}\.service"/,
     );

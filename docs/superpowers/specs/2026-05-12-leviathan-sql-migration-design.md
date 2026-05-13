@@ -228,7 +228,7 @@ Required UI changes:
 - remove all Firebase setup copy
 - remove all Google SSO copy
 - update users/admin settings for local accounts and password-based administration
-- keep mock login available only in local dev mode
+- keep local bootstrap login available only in local dev mode
 
 ## Documentation Changes
 

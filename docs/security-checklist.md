@@ -2,9 +2,6 @@
 
 ## Core Runtime
 
-- `MOCK_AUTH=false` in production
-- `MOCK_DATA=false` in production
-- `VITE_USE_MOCK_AUTH=false` in production
 - panel and API are behind HTTPS
 - session cookies are `Secure` in production deployments
 - only intended panel origins are allowed by CORS

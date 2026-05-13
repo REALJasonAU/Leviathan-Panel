@@ -113,9 +113,8 @@ Minimum recovery checklist:
 Before production launch:
 
 - use HTTPS
-- keep `MOCK_AUTH=false`
-- keep `MOCK_DATA=false`
-- keep `VITE_USE_MOCK_AUTH=false`
+- keep browser auth on secure cookie sessions
+- keep the panel and daemon pointed at their MariaDB instances
 - rotate bootstrap and daemon tokens if exposed
 - protect MariaDB root access
 - protect panel and daemon hosts with OS-level hardening

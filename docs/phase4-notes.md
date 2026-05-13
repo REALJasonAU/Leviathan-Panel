@@ -113,7 +113,7 @@ Billing events map to provision, suspend, unsuspend, terminate, update-limits, o
 
 ## Security Checklist
 
-- Keep `MOCK_AUTH=false` and `MOCK_DATA=false` in production.
+- Keep the panel and daemon pointed at their MariaDB instances in production.
 - Restrict CORS with `PANEL_ORIGIN`.
 - Keep Leviathan secrets encrypted server-side and out of frontend env files.
 - Use SQL-backed control-plane writes for operational collections.

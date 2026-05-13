@@ -110,7 +110,7 @@ Run:
 pnpm test:e2e
 ```
 
-The initial Playwright coverage verifies mock login and release-candidate navigation. Expand this in Phase 6 for complete workflows.
+The initial Playwright coverage verifies local-admin login and release-candidate navigation. Expand this in Phase 6 for complete workflows.
 
 ## Remaining Phase 6 Work
 

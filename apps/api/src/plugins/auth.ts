@@ -31,14 +31,6 @@ export const resolveAuthFromToken = async (token: string) => {
     return auth;
   }
 
-  if (config.MOCK_AUTH && (token === "dev-admin" || token === "dev-user")) {
-    const auth = await store.upsertUserFromAuth(
-      null,
-      token === "dev-admin" ? "admin" : "user",
-    );
-    return { ...auth, authType: "mock" as const };
-  }
-
   throw new AppError(401, "UNAUTHORIZED", "Invalid bearer token");
 };
 

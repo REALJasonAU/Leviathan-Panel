@@ -32,9 +32,9 @@ Manual panel setup is still possible:
 
 ```bash
 cd /path/to/leviathan
-ADMIN_USERNAME=owner \
-ADMIN_EMAIL=owner@example.com \
-ADMIN_PASSWORD='strong-password' \
+ADMIN_USERNAME=local-admin \
+ADMIN_EMAIL=local-admin@example.test \
+ADMIN_PASSWORD='change-me-now' \
 pnpm --filter @voltan/api seed
 ```
 
@@ -69,10 +69,6 @@ Leviathan uses secure server-side sessions.
 - Cookies are `HttpOnly` and `SameSite=Lax`.
 - Sessions are stored in the panel database.
 
-## Mock Mode
+## Local Development Notes
 
-Mock auth and mock data should only be enabled in local development. Production installs should keep:
-
-- `MOCK_AUTH=false`
-- `MOCK_DATA=false`
-- `VITE_USE_MOCK_AUTH=false`
+For local development, keep the panel and daemon on memory-backed or local MariaDB databases, and bootstrap a local admin account with explicit credentials when you need one.

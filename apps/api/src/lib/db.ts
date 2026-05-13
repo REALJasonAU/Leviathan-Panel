@@ -116,10 +116,6 @@ const createDocumentStoreCompat = (
 });
 
 const createDatabase = async () => {
-  if (config.MOCK_DATA) {
-    return null;
-  }
-
   if (config.DB_DRIVER === "memory") {
     return createDocumentDatabase({
       driver: "memory",
@@ -139,19 +135,8 @@ const createDatabase = async () => {
 };
 
 const documentDatabase = await createDatabase();
-const nullDocumentStore = {
-  collection: () => {
-    throw new Error("Document database is not enabled");
-  },
-  close: async () => {},
-} as DocumentStoreCompat;
-
 export const databaseEnabled = documentDatabase !== null;
-export const firestore = (
-  documentDatabase
-    ? createDocumentStoreCompat(documentDatabase)
-    : nullDocumentStore
-) as DocumentStoreCompat;
+export const firestore = createDocumentStoreCompat(documentDatabase!);
 export const closeDatabase = async () => {
   await firestore.close();
 };

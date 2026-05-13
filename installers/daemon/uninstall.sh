@@ -5,6 +5,7 @@ INSTALL_DIR="${INSTALL_DIR:-/opt/leviathan}"
 SERVICE_NAME="${SERVICE_NAME:-leviathan-daemon}"
 UPDATE_SERVICE_NAME="${UPDATE_SERVICE_NAME:-leviathan-daemon-update}"
 UPDATE_TIMER_NAME="${UPDATE_TIMER_NAME:-leviathan-daemon-update}"
+INSTALL_MARKER="${INSTALL_MARKER:-${INSTALL_DIR}/.leviathan-install.json}"
 KEEP_DATA=false
 DRY_RUN=false
 
@@ -53,6 +54,7 @@ fi
 run rm -f "/etc/systemd/system/${SERVICE_NAME}.service"
 run rm -f "/etc/systemd/system/${UPDATE_SERVICE_NAME}.service"
 run rm -f "/etc/systemd/system/${UPDATE_TIMER_NAME}.timer"
+run rm -f "${INSTALL_MARKER}"
 run systemctl daemon-reload
 run rm -rf "${INSTALL_DIR}"
 

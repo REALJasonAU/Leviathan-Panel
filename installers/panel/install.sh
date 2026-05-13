@@ -6,6 +6,7 @@ PANEL_SERVICE_NAME="${PANEL_SERVICE_NAME:-leviathan-panel}"
 UPDATE_SERVICE_NAME="${UPDATE_SERVICE_NAME:-leviathan-panel-update}"
 UPDATE_TIMER_NAME="${UPDATE_TIMER_NAME:-leviathan-panel-update}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/leviathan}"
+INSTALL_MARKER="${INSTALL_MARKER:-${INSTALL_DIR}/.leviathan-install.json}"
 WORKDIR="${WORKDIR:-$(pwd)}"
 SOURCE_DIR=""
 TEMP_SOURCE_DIR=""
@@ -100,6 +101,14 @@ cleanup_temp_source() {
   if [[ -n "${TEMP_SOURCE_DIR}" && -d "${TEMP_SOURCE_DIR}" && "${DRY_RUN}" != "true" ]]; then
     rm -rf "${TEMP_SOURCE_DIR}"
   fi
+}
+
+is_already_installed() {
+  if [[ -f "${INSTALL_MARKER}" && -f "/etc/systemd/system/${API_SERVICE_NAME}.service" && -f "/etc/systemd/system/${PANEL_SERVICE_NAME}.service" ]]; then
+    return 0
+  fi
+
+  [[ -d "${INSTALL_DIR}" && -f "/etc/systemd/system/${API_SERVICE_NAME}.service" && -f "/etc/systemd/system/${PANEL_SERVICE_NAME}.service" ]]
 }
 
 need_root() {
@@ -216,6 +225,24 @@ validate_inputs() {
     DB_PASSWORD="$(random_secret 32)"
   fi
   log "Install configuration collected. Continuing with dependency and MariaDB setup..."
+}
+
+write_install_marker() {
+  local marker_file="${INSTALL_MARKER}"
+  if [[ "${DRY_RUN}" == "true" ]]; then
+    echo "[dry-run] write ${marker_file}"
+    return
+  fi
+  cat >"${marker_file}" <<EOF
+{
+  "product": "Leviathan Panel",
+  "installDir": "${INSTALL_DIR}",
+  "repoUrl": "${REPO_URL}",
+  "repoBranch": "${REPO_BRANCH}",
+  "installedAt": "$(date --iso-8601=seconds)"
+}
+EOF
+  chmod 600 "${marker_file}"
 }
 
 detect_distro() {
@@ -464,8 +491,6 @@ PORT=${API_PORT}
 HOST=0.0.0.0
 PANEL_ORIGIN=${PANEL_ORIGIN}
 PANEL_EXTRA_ORIGINS=
-MOCK_AUTH=false
-MOCK_DATA=false
 DB_DRIVER=mysql
 DB_HOST=127.0.0.1
 DB_PORT=3306
@@ -492,7 +517,6 @@ write_panel_env() {
   fi
   cat >"${env_file}" <<EOF
 VITE_API_BASE_URL=${API_BASE_URL}
-VITE_USE_MOCK_AUTH=false
 EOF
   chmod 644 "${env_file}"
 }
@@ -682,8 +706,11 @@ main() {
   trap 'print_troubleshooting' ERR
   trap 'cleanup_temp_source' EXIT
   parse_args "$@"
-  validate_inputs
   need_root
+  if [[ "${DRY_RUN}" != "true" && is_already_installed ]]; then
+    fail "Leviathan panel is already installed at ${INSTALL_DIR}. Run update.sh or uninstall.sh instead."
+  fi
+  validate_inputs
   detect_distro
   detect_package_manager
   assert_supported_distro
@@ -716,6 +743,7 @@ main() {
   validate_panel_service
   log "Validating Docker..."
   validate_docker
+  write_install_marker
   print_success
 }
 

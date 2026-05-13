@@ -56,6 +56,8 @@ describe("panel installer scripts", () => {
       "curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel/refs/heads/master/installers/panel/install.sh",
       "LeviathanInstallerSecret",
       ".leviathan-install.json",
+      "hostname -I",
+      "ip -o -4 addr show scope global",
       "|| true",
     ]) {
       expect(install).toContain(token);
@@ -72,6 +74,7 @@ describe("panel installer scripts", () => {
     expect(update).toContain("--dry-run");
     expect(update).toContain("git fetch --all --prune");
     expect(update).toContain("git pull --ff-only");
+    expect(update).toContain("refresh_loopback_runtime_urls");
     expect(update).toMatch(
       /systemctl restart "\$\{API_SERVICE_NAME\}\.service"/,
     );

@@ -2,6 +2,8 @@
 
 The Leviathan panel installer provisions the API and Svelte panel on a Linux host with as few manual steps as practical. It detects `/etc/os-release`, chooses a supported package manager, installs safe dependencies, installs Docker when needed, installs and enables local MariaDB, seeds the first Leviathan admin account, writes API and panel environment files, creates systemd services plus a daily update timer, and validates the API, panel, MariaDB, and Docker runtime before declaring success.
 
+If no explicit public origin is provided, the installer will prefer the machine's detected global IPv4 address instead of leaving the panel pinned to loopback. That keeps direct-IP installs usable without manual env edits. The panel client also falls back to the current host when it detects a loopback API base.
+
 ## Supported Distro Matrix
 
 | Distro        | Package Manager | Status         | Notes                                                                                             |

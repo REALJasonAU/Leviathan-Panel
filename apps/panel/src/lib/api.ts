@@ -24,7 +24,67 @@ import type {
   CloudflareRouteRecord,
 } from "@voltan/shared";
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:4000";
+const localHosts = new Set(["localhost", "127.0.0.1", "::1"]);
+
+type ApiRuntimeContext = {
+  hostname: string;
+  protocol: string;
+};
+
+const normalizeBaseUrl = (value: string) => value.replace(/\/$/, "");
+
+const isLoopbackHost = (hostname: string) => localHosts.has(hostname);
+
+const isLoopbackUrl = (value: string) => {
+  try {
+    return localHosts.has(new URL(value).hostname);
+  } catch {
+    return false;
+  }
+};
+
+export const resolveApiBaseUrls = (
+  configured = import.meta.env.VITE_API_BASE_URL?.trim(),
+  runtimeContext: ApiRuntimeContext | null = typeof window !== "undefined"
+    ? {
+        hostname: window.location.hostname,
+        protocol: window.location.protocol,
+      }
+    : null,
+) => {
+  const candidates: string[] = [];
+  const addCandidate = (value: string) => {
+    const normalized = normalizeBaseUrl(value);
+    if (!candidates.includes(normalized)) {
+      candidates.push(normalized);
+    }
+  };
+
+  const runtimeBaseUrl = runtimeContext
+    ? `${runtimeContext.protocol}//${runtimeContext.hostname}:4000`
+    : null;
+
+  if (runtimeBaseUrl) {
+    addCandidate(runtimeBaseUrl);
+  }
+
+  if (configured) {
+    if (!isLoopbackUrl(configured)) {
+      addCandidate(configured);
+    } else if (runtimeBaseUrl && !isLoopbackHost(runtimeContext!.hostname)) {
+      addCandidate(runtimeBaseUrl);
+    }
+  }
+
+  if (!candidates.length) {
+    addCandidate("http://localhost:4000");
+  }
+
+  return candidates;
+};
+
+const apiBaseUrls = resolveApiBaseUrls();
+const apiBaseUrl = apiBaseUrls[0];
 export const SESSION_SENTINEL = "__cookie_session__";
 
 type RequestOptions = {
@@ -33,35 +93,65 @@ type RequestOptions = {
   body?: unknown;
 };
 
+const isNetworkFetchError = (error: unknown) =>
+  error instanceof TypeError ||
+  (error instanceof Error &&
+    /failed to fetch|networkerror|load failed/i.test(error.message));
+
+const buildRequestInit = (options: RequestOptions, includeJsonBody = true) => {
+  const headers: Record<string, string> = {};
+  if (includeJsonBody) {
+    headers["content-type"] = "application/json";
+  }
+  if (options.token && options.token !== SESSION_SENTINEL) {
+    headers.Authorization = `Bearer ${options.token}`;
+  }
+  return {
+    method: options.method ?? "GET",
+    headers,
+    credentials: "include" as const,
+    body:
+      includeJsonBody && options.body
+        ? JSON.stringify(options.body)
+        : undefined,
+  };
+};
+
 const request = async <T>(
   path: string,
   options: RequestOptions,
 ): Promise<T> => {
-  const headers: Record<string, string> = {
-    "content-type": "application/json",
-  };
-  if (options.token && options.token !== SESSION_SENTINEL) {
-    headers.Authorization = `Bearer ${options.token}`;
-  }
-
-  const response = await fetch(`${apiBaseUrl}${path}`, {
-    method: options.method ?? "GET",
-    headers,
-    credentials: "include",
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
-
-  if (!response.ok) {
-    let payload: unknown = null;
+  let lastNetworkError: unknown = null;
+  for (const baseUrl of apiBaseUrls) {
     try {
-      payload = await response.json();
-    } catch {
-      payload = await response.text();
+      const response = await fetch(
+        `${baseUrl}${path}`,
+        buildRequestInit(options),
+      );
+      if (!response.ok) {
+        let payload: unknown = null;
+        try {
+          payload = await response.json();
+        } catch {
+          payload = await response.text();
+        }
+        throw new Error(JSON.stringify(payload));
+      }
+      return response.json() as Promise<T>;
+    } catch (error) {
+      if (isNetworkFetchError(error)) {
+        lastNetworkError = error;
+        continue;
+      }
+      throw error;
     }
-    throw new Error(JSON.stringify(payload));
   }
 
-  return response.json() as Promise<T>;
+  if (lastNetworkError instanceof Error) {
+    throw lastNetworkError;
+  }
+
+  throw new Error("Failed to reach the Leviathan API");
 };
 
 const requestBlob = async (path: string, token?: string | null) => {
@@ -69,14 +159,32 @@ const requestBlob = async (path: string, token?: string | null) => {
   if (token && token !== SESSION_SENTINEL) {
     headers.Authorization = `Bearer ${token}`;
   }
-  const response = await fetch(`${apiBaseUrl}${path}`, {
-    headers,
-    credentials: "include",
-  });
-  if (!response.ok) {
-    throw new Error(await response.text());
+
+  let lastNetworkError: unknown = null;
+  for (const baseUrl of apiBaseUrls) {
+    try {
+      const response = await fetch(`${baseUrl}${path}`, {
+        headers,
+        credentials: "include",
+      });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      return response.blob();
+    } catch (error) {
+      if (isNetworkFetchError(error)) {
+        lastNetworkError = error;
+        continue;
+      }
+      throw error;
+    }
   }
-  return response.blob();
+
+  if (lastNetworkError instanceof Error) {
+    throw lastNetworkError;
+  }
+
+  throw new Error("Failed to reach the Leviathan API");
 };
 
 const uploadForm = async <T>(
@@ -88,16 +196,34 @@ const uploadForm = async <T>(
   if (token && token !== SESSION_SENTINEL) {
     headers.Authorization = `Bearer ${token}`;
   }
-  const response = await fetch(`${apiBaseUrl}${path}`, {
-    method: "POST",
-    headers,
-    credentials: "include",
-    body,
-  });
-  if (!response.ok) {
-    throw new Error(await response.text());
+
+  let lastNetworkError: unknown = null;
+  for (const baseUrl of apiBaseUrls) {
+    try {
+      const response = await fetch(`${baseUrl}${path}`, {
+        method: "POST",
+        headers,
+        credentials: "include",
+        body,
+      });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      return response.json() as Promise<T>;
+    } catch (error) {
+      if (isNetworkFetchError(error)) {
+        lastNetworkError = error;
+        continue;
+      }
+      throw error;
+    }
   }
-  return response.json() as Promise<T>;
+
+  if (lastNetworkError instanceof Error) {
+    throw lastNetworkError;
+  }
+
+  throw new Error("Failed to reach the Leviathan API");
 };
 
 export const consoleSocketUrl = (token: string, serverId: string) => {
@@ -107,6 +233,8 @@ export const consoleSocketUrl = (token: string, serverId: string) => {
   }
   return `${base}?token=${encodeURIComponent(token)}`;
 };
+
+export const runtimeApiBaseUrl = apiBaseUrl;
 
 export type SessionResponse = {
   user: {

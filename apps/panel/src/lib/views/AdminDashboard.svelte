@@ -1450,13 +1450,20 @@
               <ActionButton on:click={importEnvExample}>Parse Import</ActionButton>
             </div>
             <div class="env-preview">
-              {#each previewDefinitions as definition}
-                <div class="env-row">
-                  <strong>{definition.key}</strong>
-                  <small>{definition.description ?? definition.displayName}</small>
-                  <StatusBadge status={definition.secret ? "warning" : "online"} label={definition.secret ? "Secret" : "Visible"} />
-                </div>
-              {/each}
+              {#if previewDefinitions.length}
+                {#each previewDefinitions as definition}
+                  <div class="env-row">
+                    <strong>{definition.key}</strong>
+                    <small>{definition.description ?? definition.displayName}</small>
+                    <StatusBadge
+                      status={definition.secret ? "warning" : "online"}
+                      label={definition.secret ? "Secret" : "Visible"}
+                    />
+                  </div>
+                {/each}
+              {:else}
+                <p class="muted">Paste a `.env.example` file and Leviathan will preview the imported variables here.</p>
+              {/if}
             </div>
           </Card>
           <div id="create-template-surface" tabindex="-1">

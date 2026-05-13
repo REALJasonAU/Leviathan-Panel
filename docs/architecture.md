@@ -23,7 +23,7 @@ Leviathan uses a split SQL model:
 - `daemon MariaDB`
   - node-local operational state for transfers, local job state, backup execution state, SFTP metadata, update history, and reconnect-safe runtime records
 
-Mock memory-mode storage still exists for local development only.
+Memory-backed storage remains available for local development only.
 
 ## Authentication
 
@@ -72,4 +72,4 @@ The Leviathan panel uses a shared `Command Deck` shell across admin and user vie
 
 ## Release Reality
 
-Ubuntu and Debian are the fully targeted deployment paths today. Fedora, Rocky Linux, AlmaLinux, CentOS Stream, and Arch Linux are handled through best-effort installer branches and should be staged before production use.
+Ubuntu and Debian are the fully targeted deployment paths today. Fedora, Rocky Linux, AlmaLinux, CentOS Stream, and Arch Linux remain best-effort installer branches and should be staged before production use.

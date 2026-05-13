@@ -8,6 +8,7 @@ const loginAsAdmin = async (page: Page) => {
   await page.getByLabel("Username or Email").fill(adminIdentifier);
   await page.getByLabel("Password").fill(adminPassword);
   await page.getByRole("button", { name: "Sign in to Leviathan" }).click();
+  await page.waitForURL(/#overview/);
   await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
 };
 
@@ -62,8 +63,16 @@ test("admin can create a node, parse env metadata, and provision a server", asyn
   const envImportTextarea = page.locator("textarea").first();
   await envImportTextarea.fill("APP_PORT=25565\nRCON_PASSWORD=\n");
   await expect(envImportTextarea).toHaveValue(/APP_PORT/);
+  const envImportResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes("/v1/templates/import-env-example") &&
+      response.request().method() === "POST",
+  );
   await page.getByRole("button", { name: "Parse Import" }).click();
-  await expect(page.getByText("APP_PORT")).toBeVisible();
+  await envImportResponse;
+  await expect(page.locator(".env-preview .env-row").first()).toContainText(
+    "APP_PORT",
+  );
   const createTemplateCard = page.locator("#create-template-surface");
   await createTemplateCard.getByLabel("ID").fill("tpl_release_fleet");
   await createTemplateCard.getByLabel("Name").fill("Release Fleet Template");
@@ -132,9 +141,16 @@ test("admin can create an API key and dry-run a Cloudflare route", async ({
 
   await page.locator('.sidebar-nav a[href="#cloudflare"]').first().click();
   await page.getByLabel("Hostname").fill(routeHostname);
+  await page.getByLabel("Service").fill("http://127.0.0.1:25565");
   await page.getByLabel("Tunnel ID").fill("tunnel_test");
   await page.getByLabel("Zone ID").fill("zone_test");
+  const createRouteResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes("/v1/cloudflare/routes") &&
+      response.request().method() === "POST",
+  );
   await page.getByRole("button", { name: "Create Route" }).click();
+  await createRouteResponse;
   await expect(page.getByText(routeHostname)).toBeVisible();
 
   const dryRunResponse = page.waitForResponse(

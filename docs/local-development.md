@@ -49,7 +49,7 @@ BOOTSTRAP_ADMIN_ON_START=true \
 pnpm --filter @voltan/api seed
 ```
 
-Leviathan no longer creates an implicit demo admin user. If you are using the memory-backed local dev server, provide explicit credentials as shown above or log in with the account created by the installer.
+Leviathan no longer creates an implicit admin user. If you are using the memory-backed local dev server, provide explicit credentials as shown above or log in with the account created by the installer.
 
 ## Useful Commands
 
@@ -64,4 +64,5 @@ pnpm test:e2e
 ## Notes
 
 - Local browser development supports both `localhost` and `127.0.0.1` panel origins by default.
+- The panel client will also fall back to the current host when the API base is still pointed at a loopback address, which keeps direct IP/browser-preview access working.
 - Local development should use the real login flow with a seeded or bootstrapped admin account.

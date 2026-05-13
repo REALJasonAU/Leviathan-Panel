@@ -28,6 +28,7 @@ Manual panel setup is still possible:
    - `SESSION_TTL_HOURS=168`
 5. Copy `apps/panel/.env.example` to `apps/panel/.env`.
 6. Set `VITE_API_BASE_URL`.
+   - If you leave it pointed at `localhost`, the panel client will fall back to the current host for browser access when possible.
 7. Seed the first admin user:
 
 ```bash

@@ -84,6 +84,8 @@ bash <(curl -fsSL https://raw.githubusercontent.com/REALJasonAU/Leviathan-Panel/
 
 The panel installer prompts for the panel origin plus the first admin username, email, and password. Both installers provision local MariaDB by default. Ubuntu and Debian are the fully targeted paths; Fedora, Rocky Linux, AlmaLinux, CentOS Stream, and Arch Linux remain best-effort until distro-specific smoke tests are completed.
 
+If you do not pass a panel origin explicitly, the installer will prefer the machine's detected global IPv4 address so direct-IP browser access does not fall back to `localhost`.
+
 ## Documentation
 
 - [Architecture](./docs/architecture.md)
@@ -144,4 +146,4 @@ The repository includes working core flows for:
 - billing webhook validation interfaces
 - installer automation
 
-Some advanced roadmap items remain partial rather than fully production-complete, including full embedded SFTP network serving, package-specific daemon replacement, and broad distro smoke testing outside Ubuntu/Debian.
+Some deeper operational areas remain intentionally partial rather than fully production-complete, including full embedded SFTP network serving, package-specific daemon replacement, and distro smoke testing beyond Ubuntu/Debian.

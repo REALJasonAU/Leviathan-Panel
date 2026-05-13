@@ -1,3 +1,5 @@
+import os from "node:os";
+
 import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
@@ -23,11 +25,54 @@ import { registerTemplateRoutes } from "./routes/templates.js";
 import { registerServerRoutes } from "./routes/servers.js";
 import { registerDaemonRoutes } from "./routes/daemon.js";
 
+const loopbackHosts = new Set(["localhost", "127.0.0.1", "::1"]);
+
+const detectPublicHost = () => {
+  const hostList = process.env.LEVIATHAN_PUBLIC_HOSTS?.trim();
+  if (hostList) {
+    const override = hostList
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .find((item) => !loopbackHosts.has(item));
+    if (override) {
+      return override;
+    }
+  }
+
+  const interfaces = os.networkInterfaces();
+  for (const entries of Object.values(interfaces)) {
+    for (const entry of entries ?? []) {
+      if (entry.family !== "IPv4" || entry.internal) {
+        continue;
+      }
+      if (!loopbackHosts.has(entry.address)) {
+        return entry.address;
+      }
+    }
+  }
+
+  return null;
+};
+
 export const buildApp = async () => {
   const allowedOrigins = new Set([
     config.PANEL_ORIGIN,
     ...config.PANEL_EXTRA_ORIGINS,
   ]);
+
+  try {
+    const panelOrigin = new URL(config.PANEL_ORIGIN);
+    if (loopbackHosts.has(panelOrigin.hostname)) {
+      const detectedHost = detectPublicHost();
+      if (detectedHost) {
+        const origin = `${panelOrigin.protocol}//${detectedHost}:${panelOrigin.port || "4173"}`;
+        allowedOrigins.add(origin);
+      }
+    }
+  } catch {
+    // Ignore malformed origins here; validation happens in config parsing.
+  }
 
   const app = Fastify({
     logger: {

@@ -17,7 +17,7 @@ Leviathan 0.1.0 RC1 is the first release-candidate milestone for the rebranded p
 
 - Ubuntu and Debian are the fully targeted production installer paths.
 - Fedora, Rocky Linux, AlmaLinux, CentOS Stream, and Arch Linux are best-effort.
-- Full production SFTP network serving is still partial.
+- Full production SFTP network serving remains partial.
 - Root-level firewall enforcement should be staged carefully before broad production rollout.
 
 ## Upgrade Guidance

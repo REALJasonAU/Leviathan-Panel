@@ -118,6 +118,7 @@ else
 fi
 
 run_shell "cd '${INSTALL_DIR}' && pnpm install && pnpm build"
+run systemctl daemon-reload
 run systemctl restart "${SERVICE_NAME}.service"
 run systemctl is-active --quiet "${SERVICE_NAME}.service"
 if systemctl list-unit-files "${UPDATE_TIMER_NAME}.timer" >/dev/null 2>&1; then

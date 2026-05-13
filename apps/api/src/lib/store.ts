@@ -470,7 +470,6 @@ export interface Store {
   listAuditLogs(limit?: number): Promise<AuditLogRecord[]>;
 }
 
-// Legacy fallback retained for development-time reference.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 class MemoryStore implements Store {
   protected readonly users = new Map<string, UserRecord>();
@@ -818,7 +817,6 @@ class MemoryStore implements Store {
       disabled: false,
       createdAt: nowIso(),
       updatedAt: nowIso(),
-      lastLoginAt: nowIso(),
     });
     const account = LocalAccountSchema.parse({
       userId: user.uid,
@@ -898,6 +896,8 @@ class MemoryStore implements Store {
     }
     const user = this.users.get(session.userId);
     if (!user || user.disabled) {
+      this.sessions.delete(sessionId);
+      await this.deleteDoc("sessions", sessionId);
       return null;
     }
     const roles = await this.getRolesByIds(user.roleIds);
@@ -917,27 +917,27 @@ class MemoryStore implements Store {
 
   async upsertUserFromAuth(
     token: ExternalIdentity | null,
-    mode: "admin" | "user",
+    _mode: "admin" | "user",
   ): Promise<AuthContext> {
-    const uid = token?.uid ?? `dev-${mode}`;
+    void _mode;
+    if (!token?.uid) {
+      throw new Error("External identity auth is disabled in Leviathan.");
+    }
+    const uid = token.uid;
     const existing = this.users.get(uid);
-    const roleIds =
-      existing?.roleIds ?? (mode === "admin" ? ["admin"] : ["user"]);
+    const roleIds = existing?.roleIds ?? [];
     const user = UserSchema.parse({
       uid,
-      email: token?.email ?? existing?.email,
-      displayName:
-        token?.name ??
-        existing?.displayName ??
-        (mode === "admin" ? "Dev Admin" : "Dev User"),
-      photoUrl: token?.picture ?? existing?.photoUrl,
+      email: token.email ?? existing?.email,
+      displayName: token.name ?? existing?.displayName ?? uid,
+      photoUrl: token.picture ?? existing?.photoUrl,
       roleIds,
       serverIds: existing?.serverIds ?? [],
       twoFactorRequired: existing?.twoFactorRequired ?? false,
       disabled: existing?.disabled ?? false,
       createdAt: existing?.createdAt ?? nowIso(),
       updatedAt: nowIso(),
-      lastLoginAt: nowIso(),
+      lastLoginAt: existing?.lastLoginAt,
     });
     this.users.set(uid, user);
     await this.persistUser(user);
@@ -2007,7 +2007,6 @@ class SqlStore implements Store {
       disabled: false,
       createdAt: nowIso(),
       updatedAt: nowIso(),
-      lastLoginAt: nowIso(),
     });
 
     const account = LocalAccountSchema.parse({
@@ -2101,6 +2100,7 @@ class SqlStore implements Store {
     }
     const user = UserSchema.parse(userSnapshot.data());
     if (user.disabled) {
+      await firestore!.collection("sessions").doc(sessionId).delete();
       return null;
     }
     const roles = await this.getRolesByIds(user.roleIds);
@@ -2119,32 +2119,31 @@ class SqlStore implements Store {
 
   async upsertUserFromAuth(
     token: ExternalIdentity | null,
-    mode: "admin" | "user",
+    _mode: "admin" | "user",
   ): Promise<AuthContext> {
-    const uid = token?.uid ?? `dev-${mode}`;
+    void _mode;
+    if (!token?.uid) {
+      throw new Error("External identity auth is disabled in Leviathan.");
+    }
+    const uid = token.uid;
     const ref = firestore.collection("users").doc(uid);
     const snapshot = await ref.get();
-    const roleIds = snapshot.exists
-      ? ((snapshot.data()?.roleIds as string[] | undefined) ?? [])
-      : mode === "admin"
-        ? ["admin"]
-        : ["user"];
+    const roleIds = (
+      (snapshot.data()?.roleIds as string[] | undefined) ?? []
+    ).filter(Boolean);
 
     const payload = UserSchema.parse({
       uid,
-      email: token?.email ?? snapshot.data()?.email,
-      displayName:
-        token?.name ??
-        snapshot.data()?.displayName ??
-        (mode === "admin" ? "Dev Admin" : "Dev User"),
-      photoUrl: token?.picture ?? snapshot.data()?.photoUrl,
+      email: token.email ?? snapshot.data()?.email,
+      displayName: token.name ?? snapshot.data()?.displayName ?? uid,
+      photoUrl: token.picture ?? snapshot.data()?.photoUrl,
       roleIds,
       serverIds: (snapshot.data()?.serverIds as string[] | undefined) ?? [],
       twoFactorRequired: snapshot.data()?.twoFactorRequired ?? false,
       disabled: snapshot.data()?.disabled ?? false,
       createdAt: snapshot.data()?.createdAt ?? nowIso(),
       updatedAt: nowIso(),
-      lastLoginAt: nowIso(),
+      lastLoginAt: snapshot.data()?.lastLoginAt ?? undefined,
     });
     await ref.set(payload, { merge: true });
     const roles = await this.getRolesByIds(payload.roleIds);

@@ -199,6 +199,33 @@ random_secret() {
   printf "%s" "${secret}"
 }
 
+detect_public_host() {
+  local candidate=""
+  if command -v hostname >/dev/null 2>&1; then
+    for candidate in $(hostname -I 2>/dev/null || true); do
+      case "${candidate}" in
+        127.*|::1)
+          continue
+          ;;
+        *)
+          printf "%s" "${candidate}"
+          return 0
+          ;;
+      esac
+    done
+  fi
+
+  if command -v ip >/dev/null 2>&1; then
+    candidate="$(ip -o -4 addr show scope global 2>/dev/null | awk '{split($4,a,"/"); print a[1]; exit}')"
+    if [[ -n "${candidate}" ]]; then
+      printf "%s" "${candidate}"
+      return 0
+    fi
+  fi
+
+  return 1
+}
+
 sql_escape() {
   printf "%s" "$1" | sed "s/'/''/g"
 }
@@ -208,6 +235,16 @@ shell_quote() {
 }
 
 validate_inputs() {
+  local detected_host=""
+  detected_host="$(detect_public_host || true)"
+  if [[ -n "${detected_host}" ]]; then
+    if [[ -z "${PANEL_ORIGIN}" || "${PANEL_ORIGIN}" == "http://localhost:${PANEL_PORT}" || "${PANEL_ORIGIN}" == "http://127.0.0.1:${PANEL_PORT}" ]]; then
+      PANEL_ORIGIN="http://${detected_host}:${PANEL_PORT}"
+    fi
+    if [[ -z "${API_BASE_URL}" || "${API_BASE_URL}" == "http://localhost:${API_PORT}" || "${API_BASE_URL}" == "http://127.0.0.1:${API_PORT}" ]]; then
+      API_BASE_URL="http://${detected_host}:${API_PORT}"
+    fi
+  fi
   prompt_if_missing PANEL_ORIGIN "Panel origin URL"
   prompt_if_missing API_BASE_URL "Public API base URL"
   prompt_if_missing ADMIN_USERNAME "First admin username"
